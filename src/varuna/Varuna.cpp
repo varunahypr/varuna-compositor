@@ -60,13 +60,9 @@
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/output/Monitor.hpp>
-#ifdef VARUNA_NATIVE
 #include <hyprland/src/debug/HyprCtl.hpp>
 #include <hyprland/src/notification/NotificationOverlay.hpp>
 #include "Varuna.hpp"
-#else
-#include <hyprland/src/plugins/PluginAPI.hpp>
-#endif
 #include <hyprland/src/render/OpenGL.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/gl/GLFramebuffer.hpp>
@@ -85,17 +81,9 @@
 #include "conf.hpp"
 #include "shaders.hpp"
 
-#ifdef VARUNA_NATIVE
 static void notify(const std::string& text, const CHyprColor& color) {
     Notification::overlay()->addNotification(text, color, 8000);
 }
-#else
-static HANDLE PHANDLE = nullptr;
-
-static void notify(const std::string& text, const CHyprColor& color) {
-    HyprlandAPI::addNotification(PHANDLE, text, color, 8000);
-}
-#endif
 
 // ---------------------------------------------------------------- settings --
 
@@ -462,6 +450,8 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     std::string        cmd, sub, ns, list;
     in >> cmd >> sub;
     // Minimizing into the Dock (minimize.hpp).
+    if (sub == "features")
+        return "minimize";
     if (sub == "minimize" || sub == "restore" || sub == "snapinfo" || sub == "where")
         return minimize::command(sub, in);
     // Snapping a floating window (snap.hpp).
@@ -884,6 +874,7 @@ static void start() {
     requests::g_limited       = snap::limited;
     snap::init();
     corners::init();
+    minimize::init();
     titlebar::init();
     g_settings = settingsFrom(defaultValues());
     g_confPath = confPath();
@@ -910,7 +901,6 @@ static void stop() {
 
 static const SHyprCtlCommand COMMAND = {.name = "varunaglass", .exact = false, .fn = onShapesCommand};
 
-#ifdef VARUNA_NATIVE
 static const bool g_announced = setenv("VARUNA_COMPOSITOR", "1", 1) == 0;
 
 void Varuna::init() {
@@ -922,30 +912,3 @@ void Varuna::init() {
 void Varuna::stop() {
     ::stop();
 }
-#else
-APICALL EXPORT std::string PLUGIN_API_VERSION() {
-    return HYPRLAND_API_VERSION;
-}
-
-APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
-    PHANDLE = handle;
-    if (getenv("VARUNA_COMPOSITOR")) {
-        notify("[varuna-glass] not loaded: varuna-compositor has it built in", CHyprColor{1, .6, .2, 1});
-        throw std::runtime_error("[varuna-glass] built into the compositor");
-    }
-    if (std::string(__hyprland_api_get_hash()) != __hyprland_api_get_client_hash()) {
-        notify("[varuna-glass] built for a different Hyprland; rebuild it (varuna/install.sh)", CHyprColor{1, .3, .3, 1});
-        throw std::runtime_error("[varuna-glass] version mismatch");
-    }
-    start();
-    HyprlandAPI::registerHyprCtlCommand(PHANDLE, COMMAND);
-
-    refreshAll();
-    return {"varuna-glass", "Live liquid glass under varuna's bar and dock; drag icons at their hotspot; minimize and zoom requests, minimizing into the Dock; drags keep the grab point; nothing goes under the top bar", "varuna", "0.1"};
-}
-
-APICALL EXPORT void PLUGIN_EXIT() {
-    stop();
-    refreshAll();
-}
-#endif
