@@ -896,6 +896,9 @@ void CWindow::onGlowAngleAnimEnd(WP<CBaseAnimatedVariable> pav) {
 }
 
 void CWindow::setHidden(bool hidden) {
+    if (!hidden && m_minimized)
+        return;
+
     m_hidden = hidden;
 
     if (hidden)

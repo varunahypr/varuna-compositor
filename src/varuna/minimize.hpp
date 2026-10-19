@@ -23,10 +23,17 @@
 #include <cmath>
 #include <format>
 #include <map>
+#include <ranges>
 #include <sstream>
 #include <vector>
 
+#include <hyprland/src/desktop/history/WindowHistoryTracker.hpp>
+#include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/state/WindowState.hpp>
+#include <hyprland/src/event/EventBus.hpp>
+#include <hyprland/src/layout/LayoutManager.hpp>
+#include <hyprland/src/managers/EventManager.hpp>
+#include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/render/Framebuffer.hpp>
 #include <hyprland/src/render/Renderer.hpp>
@@ -55,8 +62,14 @@ struct SAnim {
     Clock::time_point start;
 };
 
-static std::vector<SAnim>                                 g_anims;
-static std::map<const Desktop::View::CWindow*, SPhoto>    g_kept;
+struct SMinimized {
+    PHLWINDOWREF        window;
+    std::optional<CBox> floating;
+};
+
+static std::vector<SAnim>                                   g_anims;
+static std::map<const Desktop::View::CWindow*, SPhoto>      g_kept;
+static std::map<const Desktop::View::CWindow*, SMinimized>  g_minimized;
 
 static PHLWINDOW find(const std::string& addr) {
     uintptr_t want = 0;
@@ -135,9 +148,63 @@ static void draw(const PHLMONITOR& mon, const SPhoto& photo, const CBox& box, fl
     g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(std::move(data)));
 }
 
-static void setHidden(const PHLWINDOW& w, bool hidden) {
+static void setInvisible(const PHLWINDOW& w, bool invisible) {
     if (w)
-        w->alpha(Desktop::View::WINDOW_ALPHA_FADE)->setValueAndWarp(hidden ? 0.F : 1.F);
+        w->alpha(Desktop::View::WINDOW_ALPHA_FADE)->setValueAndWarp(invisible ? 0.F : 1.F);
+}
+
+static void announce(const PHLWINDOW& w) {
+    g_pEventManager->postEvent(SHyprIPCEvent{.event = "varunaminimize", .data = std::format("{:x},{}", rc<uintptr_t>(w.get()), w->m_minimized ? 1 : 0)});
+    Event::bus()->m_events.window.minimize.emit(w);
+}
+
+static PHLWINDOW mostRecentOnWorkspace(const PHLWINDOW& w) {
+    if (!w->m_workspace)
+        return nullptr;
+    const auto history = Desktop::History::windowTracker()->historyForWorkspace(w->m_workspace);
+    for (const auto& ref : history | std::views::reverse) {
+        const auto other = ref.lock();
+        if (other && other != w && other->m_isMapped && !other->isHidden())
+            return other;
+    }
+    return nullptr;
+}
+
+static void focusInstead(const PHLWINDOW& w) {
+    if (const auto next = mostRecentOnWorkspace(w))
+        Desktop::focusState()->fullWindowFocus(next, Desktop::FOCUS_REASON_DESKTOP_STATE_CHANGE);
+    else
+        Desktop::focusState()->resetWindowFocus();
+}
+
+static void hide(const PHLWINDOW& w) {
+    if (w->m_minimized || !w->m_isMapped)
+        return;
+    if (Fullscreen::controller()->isFullscreen(w))
+        Fullscreen::controller()->setFullscreenMode(w, Fullscreen::FSMODE_NONE, Fullscreen::FSMODE_NONE);
+    const bool focused = Desktop::focusState()->window() == w;
+    g_minimized[w.get()] = {w, w->m_isFloating ? std::optional{windowBox(w, true)} : std::nullopt};
+    g_layoutManager->removeTarget(w->layoutTarget());
+    w->m_minimized = true;
+    w->setHidden(true);
+    announce(w);
+    if (focused)
+        focusInstead(w);
+}
+
+static void show(const PHLWINDOW& w) {
+    const auto it = g_minimized.find(w.get());
+    if (!w->m_minimized || it == g_minimized.end())
+        return;
+    const auto floating = it->second.floating;
+    g_minimized.erase(it);
+    w->m_minimized = false;
+    w->setHidden(false);
+    if (w->m_workspace)
+        g_layoutManager->newTarget(w->layoutTarget(), w->m_workspace->m_space);
+    if (floating)
+        w->layoutTarget()->setPositionGlobal(*floating);
+    announce(w);
 }
 
 // ------------------------------------------------------------------ hooks --
@@ -150,7 +217,7 @@ static void onRenderPre(const PHLMONITOR& mon) {
         const auto f = frameOf(*it, w);
         if (f.done) {
             if (it->restore) {
-                setHidden(w, false);
+                setInvisible(w, false);
                 if (w)
                     g_kept.erase(w.get());
             }
@@ -175,6 +242,7 @@ static void onRenderStage(const PHLMONITOR& mon) {
 
 static void forget(const Desktop::View::CWindow* w) {
     g_kept.erase(w);
+    g_minimized.erase(w);
     std::erase_if(g_anims, [w](const SAnim& a) { return a.window.expired() || a.window.lock().get() == w; });
 }
 
@@ -199,36 +267,45 @@ static std::string command(const std::string& sub, std::istringstream& in) {
         return std::format("fb {}x{} px, covers {} {} {}x{}, window {} {} {}x{}, monitor scale {}", p->fb->m_size.x, p->fb->m_size.y, p->covers.x,
                            p->covers.y, p->covers.w, p->covers.h, p->window.x, p->window.y, p->window.w, p->window.h, mon ? mon->m_scale : 0.F);
     }
-    double x = 0, y = 0, bw = 0, bh = 0;
-    if (!(in >> x >> y >> bw >> bh) || bw <= 0 || bh <= 0)
-        return "usage: varunaglass minimize|restore ADDR x y w h";
+    double     x = 0, y = 0, bw = 0, bh = 0;
+    const bool animate = (in >> x >> y >> bw >> bh) && bw > 0 && bh > 0;
     const CBox icon{x, y, bw, bh};
     // Anything already running for this window gives way.
     std::erase_if(g_anims, [&](const SAnim& a) { return a.window.lock() == w; });
     if (sub == "minimize") {
-        const auto p = photograph(w);
-        if (!p)
-            return "no snapshot";
-        g_kept[w.get()] = *p;
-        g_anims.push_back({w, *p, icon, false, Clock::now()});
+        if (const auto p = animate && !w->m_minimized ? photograph(w) : std::nullopt) {
+            g_kept[w.get()] = *p;
+            g_anims.push_back({w, *p, icon, false, Clock::now()});
+        }
+        hide(w);
     } else {
+        const bool wasMinimized = w->m_minimized;
+        show(w);
         const auto kept = g_kept.find(w.get());
-        if (kept == g_kept.end())
-            return "no snapshot";
-        setHidden(w, true);
-        g_anims.push_back({w, kept->second, icon, true, Clock::now()});
+        if (animate && wasMinimized && kept != g_kept.end()) {
+            setInvisible(w, true);
+            g_anims.push_back({w, kept->second, icon, true, Clock::now()});
+        }
     }
     if (const auto mon = w->m_monitor.lock())
         g_pHyprRenderer->damageMonitor(mon);
     return "ok";
 }
 
+static void init() {
+    static auto onActive = Event::bus()->m_events.window.active.listen([](PHLWINDOW w, Desktop::eFocusReason) {
+        if (w && w->m_minimized)
+            show(w);
+    });
+}
+
 static void stop() {
     for (const auto& a : g_anims)
         if (a.restore)
-            setHidden(a.window.lock(), false);
+            setInvisible(a.window.lock(), false);
     g_anims.clear();
     g_kept.clear();
+    g_minimized.clear();
 }
 
 } // namespace minimize

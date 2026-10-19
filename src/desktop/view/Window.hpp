@@ -224,6 +224,8 @@ namespace Desktop::View {
         // urgency hint
         bool m_isUrgent = false;
 
+        bool m_minimized = false;
+
         // for proper cycling. While cycling we can't just move the pointers, so we need to keep track of the last cycled window.
         PHLWINDOWREF m_lastCycledWindow;
 

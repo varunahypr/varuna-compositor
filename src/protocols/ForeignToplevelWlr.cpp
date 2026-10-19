@@ -211,6 +211,11 @@ void CForeignToplevelHandleWlr::sendState() {
             *p = ZWLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_MAXIMIZED;
     }
 
+    if (PWINDOW->m_minimized) {
+        auto p = sc<uint32_t*>(wl_array_add(&state, sizeof(uint32_t)));
+        *p     = ZWLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_MINIMIZED;
+    }
+
     m_resource->sendState(&state);
 
     wl_array_release(&state);
@@ -320,6 +325,10 @@ void CForeignToplevelWlrManager::onMoveMonitor(PHLWINDOW pWindow, PHLMONITOR pMo
     H->m_resource->sendDone();
 }
 
+void CForeignToplevelWlrManager::onMinimize(PHLWINDOW pWindow) {
+    onFullscreen(pWindow);
+}
+
 void CForeignToplevelWlrManager::onFullscreen(PHLWINDOW pWindow) {
     if UNLIKELY (m_finished)
         return;
@@ -407,6 +416,15 @@ CForeignToplevelWlrProtocol::CForeignToplevelWlrProtocol(const wl_interface* ifa
 
         for (auto const& m : m_managers) {
             m->onFullscreen(window);
+        }
+    });
+
+    static auto P6 = Event::bus()->m_events.window.minimize.listen([this](PHLWINDOW window) {
+        if (!windowValidForForeign(window))
+            return;
+
+        for (auto const& m : m_managers) {
+            m->onMinimize(window);
         }
     });
 }

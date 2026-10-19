@@ -83,6 +83,7 @@ namespace Event {
                 Event<PHLWINDOW>                        kill;
                 Event<PHLWINDOW, Desktop::eFocusReason> active;
                 Event<PHLWINDOW>                        urgent;
+                Event<PHLWINDOW>                        minimize;
                 Event<PHLWINDOW>                        title;
                 Event<PHLWINDOW>                        class_;
                 Event<PHLWINDOW>                        pin;
