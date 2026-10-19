@@ -737,3 +737,9 @@ if(BUILD_TESTING)
 else()
   message(STATUS "Testing is disabled")
 endif()
+
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/varuna-include)
+file(CREATE_LINK ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/varuna-include/hyprland SYMBOLIC)
+set_source_files_properties(src/varuna/Varuna.cpp PROPERTIES
+  COMPILE_DEFINITIONS VARUNA_NATIVE
+  INCLUDE_DIRECTORIES "${CMAKE_BINARY_DIR}/varuna-include;${CMAKE_SOURCE_DIR}/src/varuna")

@@ -81,6 +81,7 @@
 #if defined(__linux__)
 #include <linux/vt.h>
 #endif
+#include "varuna/Varuna.hpp"
 
 using namespace Hyprutils::String;
 using namespace Aquamarine;
@@ -580,6 +581,7 @@ void CCompositor::cleanup() {
     // unload all remaining plugins while the compositor is
     // still in a normal working state.
     g_pPluginSystem->unloadAllPlugins();
+    Varuna::stop();
 
     State::workspaceState()->clear();
     Desktop::windowState()->clear();
@@ -736,6 +738,7 @@ void CCompositor::initManagers(eManagersInitStage stage) {
             Log::logger->log(Log::DEBUG, "Creating the PluginSystem!");
             g_pPluginSystem = makeUnique<CPluginSystem>();
             Config::mgr()->handlePluginLoads();
+            Varuna::init();
 
             Log::logger->log(Log::DEBUG, "Creating the DecorationPositioner!");
             g_pDecorationPositioner = makeUnique<CDecorationPositioner>();
