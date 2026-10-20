@@ -373,6 +373,8 @@ struct SGlass {
     float   sx = 0, sy = 0; // liquid: how it's pulled out behind as it moves
     bool    lifted = false; // a deeper shadow (search: over busy windows)
     float   opacity = 1.f;  // its surface's fade (opening, closing)
+    SP<Render::ITexture> mask;
+    CBox         maskBox;
 };
 
 /// What a piece of glass looks like: clear (Dock), platter (the switcher),
@@ -781,6 +783,14 @@ void CGlassElement::render(const PHLMONITOR& mon) {
     u1("u_shadow_radius", std::min(shadowPad, 50.f));
     u1("u_shadow_intensity", m_glass.lifted ? 0.45f : 0.22f);
     u1("u_shadow_max", std::max(shadowPad - 1.f, 0.f));
+    u1("u_mask_on", m_glass.mask ? 1.f : 0.f);
+    if (m_glass.mask) {
+        glActiveTexture(GL_TEXTURE1);
+        m_glass.mask->bind();
+        glUniform1i(glGetUniformLocation(gp, "u_mask"), 1);
+        glUniform4f(glGetUniformLocation(gp, "u_mask_rect"), m_glass.maskBox.x, m_glass.maskBox.y, m_glass.maskBox.w, m_glass.maskBox.h);
+        glActiveTexture(GL_TEXTURE0);
+    }
 
     // Only inside this frame's damage: outside it the framebuffer already
     // holds last frame's glass, and drawing again would stack the tint.
@@ -792,6 +802,11 @@ void CGlassElement::render(const PHLMONITOR& mon) {
         glDrawArrays(GL_TRIANGLES, 0, 3);
     }
 
+    if (m_glass.mask) {
+        glActiveTexture(GL_TEXTURE1);
+        m_glass.mask->unbind();
+        glActiveTexture(GL_TEXTURE0);
+    }
     st.restore();
 }
 
@@ -1193,8 +1208,13 @@ bool Varuna::onFloatingDragMoved(const SP<Layout::ITarget>& target) {
 void Varuna::beforePopup(const SP<Desktop::View::CPopup>& popup, const PHLMONITOR& monitor) {
     if (!popup || !monitor || !g_settings.enabled || !g_settings.menus || !popupWantsGlass(popup))
         return;
+    const auto surface = popup->wlSurface() ? popup->wlSurface()->resource() : nullptr;
+    if (!surface || !surface->m_current.texture)
+        return;
     CBox box = popup->visibleBox();
     box.translate(-monitor->m_position);
-    const float alpha = popup->alpha()[Desktop::View::POPUP_ALPHA_FADE]->value();
-    g_pHyprRenderer->m_renderPass.add(makeUnique<CGlassElement>(monitor, SGlass{box, g_settings.menuRadius, 0.f, KIND_PANE, -1, 0, 0, false, alpha}));
+    const CBox  painted = CBox{popup->coordsGlobal(), surface->m_current.size}.translate(-monitor->m_position);
+    const float alpha   = popup->alpha()[Desktop::View::POPUP_ALPHA_FADE]->value();
+    g_pHyprRenderer->m_renderPass.add(
+        makeUnique<CGlassElement>(monitor, SGlass{box, g_settings.menuRadius, 0.f, KIND_PANE, -1, 0, 0, false, alpha, surface->m_current.texture, painted}));
 }

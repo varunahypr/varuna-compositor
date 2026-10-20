@@ -77,6 +77,9 @@ uniform float u_ao_intensity;
 uniform float u_shadow_radius;
 uniform float u_shadow_intensity;
 uniform float u_shadow_max;
+uniform sampler2D u_mask;
+uniform float u_mask_on;
+uniform vec4 u_mask_rect;
 out vec4 o_color;
 
 #define EDGE_LENS_FALLOFF 2.4
@@ -315,5 +318,10 @@ void main() {
     float a = inside + shadowC;
     // Faded with its surface (opening and closing): premultiplied, so all of it.
     o_color = target(max(rgb + dither(p) * a, 0.0), a) * u_opacity;
+    if (u_mask_on > 0.5) {
+        vec2 m = (p - u_mask_rect.xy) / max(u_mask_rect.zw, vec2(1.0));
+        bool within = all(greaterThanEqual(m, vec2(0.0))) && all(lessThanEqual(m, vec2(1.0)));
+        o_color *= smoothstep(0.2, 0.35, within ? texture(u_mask, m).a : 0.0);
+    }
 }
 )GLSL";
