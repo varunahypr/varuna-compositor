@@ -15,6 +15,7 @@
 #include "../../state/MonitorState.hpp"
 
 #include <string_view>
+#include "../../varuna/Varuna.hpp"
 
 using namespace Layout;
 using namespace Layout::Supplementary;
@@ -110,8 +111,11 @@ bool CDragStateController::updateDragWindow() {
         DRAGGINGTARGET->rememberFloatingSize((DRAGGINGTARGET->position().size() * 0.8489).clamp(MINSIZE, Vector2D{}).floor());
 
         if (m_dragThresholdReached) {
+            const auto TILED_BOX = DRAGGINGTARGET->window() ? DRAGGINGTARGET->window()->logicalBox() : std::nullopt;
             DRAGGINGTARGET->setPositionGlobal(CBox{g_pInputManager->getMouseCoordsInternal() - DRAGGINGTARGET->position().size() / 2.F, DRAGGINGTARGET->position().size()});
             g_layoutManager->changeFloatingMode(DRAGGINGTARGET);
+            if (TILED_BOX)
+                Varuna::onDraggedOutOfTiling(DRAGGINGTARGET, *TILED_BOX);
             m_draggingTiled = true;
         }
     }
