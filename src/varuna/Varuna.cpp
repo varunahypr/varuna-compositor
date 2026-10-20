@@ -58,6 +58,7 @@
 #include "keepclear.hpp"
 #include "requests.hpp"
 #include "minimize.hpp"
+#include "picker.hpp"
 #include "wallpaper.hpp"
 #include "edge.hpp"
 #include "snap.hpp"
@@ -451,12 +452,14 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     in >> cmd >> sub;
     // Minimizing into the Dock (minimize.hpp).
     if (sub == "features")
-        return "minimize fullscreen edges wallpaper";
+        return "minimize fullscreen edges wallpaper pick";
     if (sub == "minimize" || sub == "restore" || sub == "snapinfo" || sub == "where")
         return minimize::command(sub, in);
     // Snapping a floating window (snap.hpp).
     if (sub == "wallpaper")
         return wallpaper::command(in);
+    if (sub == "pick")
+        return picker::command(in);
     if (sub == "edge")
         return edges::command(in);
     if (sub == "snap")
@@ -993,6 +996,184 @@ static void drawGenie(const PHLMONITOR& mon, const minimize::SPhoto& photo, cons
     g_pHyprRenderer->m_renderPass.add(makeUnique<CGenieElement>(mon, photo, icon, window, progress, alpha));
 }
 
+// ----------------------------------------------------------- colour picker --
+
+struct SFrozen {
+    GLuint tex = 0, fb = 0;
+    int    w = 0, h = 0;
+    bool   fp = false, taken = false;
+    float  refWhite = 1.f;
+};
+
+static std::map<std::string, SFrozen> g_frozen;
+
+static constexpr int LOUPE_CELLS = 15, LOUPE_ZOOM = 9, LOUPE_RING = 3;
+
+static float monitorRefWhite(const PHLMONITOR& mon) {
+    const bool hdr = mon->m_cmType == NCMType::CM_HDR || mon->m_cmType == NCMType::CM_HDR_EDID;
+    return hdr ? std::max(mon->m_sdrMaxLuminance * mon->m_sdrBrightness, 1.f) / 80.f : 1.f;
+}
+
+static void fillRect(int x, int y, int w, int h, float r, float g, float b) {
+    if (w <= 0 || h <= 0)
+        return;
+    glScissor(x, y, w, h);
+    glClearColor(r, g, b, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+}
+
+static void frameRect(int x, int y, int w, int h, int t, float r, float g, float b) {
+    fillRect(x - t, y - t, w + 2 * t, t, r, g, b);
+    fillRect(x - t, y + h, w + 2 * t, t, r, g, b);
+    fillRect(x - t, y, t, h, r, g, b);
+    fillRect(x + w, y, t, h, r, g, b);
+}
+
+static void drawLoupe(const PHLMONITOR& mon, GLuint drawFb, const SFrozen& frozen) {
+    const Vector2D at = (g_pInputManager->getMouseCoordsInternal() - mon->m_position) * mon->m_scale;
+    const int      cx = (int)std::floor(at.x), cy = (int)std::floor(at.y);
+    if (cx < 0 || cy < 0 || cx >= frozen.w || cy >= frozen.h)
+        return;
+    const int half = LOUPE_CELLS / 2, size = LOUPE_CELLS * LOUPE_ZOOM;
+    const int left = cx - size / 2, top = cy - size / 2;
+    fillRect(left, top, size, size, 0.f, 0.f, 0.f);
+    glDisable(GL_SCISSOR_TEST);
+    const int sx0 = std::max(0, cx - half), sy0 = std::max(0, cy - half);
+    const int sx1 = std::min(frozen.w, cx + half + 1), sy1 = std::min(frozen.h, cy + half + 1);
+    const int dx0 = left + (sx0 - (cx - half)) * LOUPE_ZOOM, dy0 = top + (sy0 - (cy - half)) * LOUPE_ZOOM;
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, frozen.fb);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFb);
+    glBlitFramebuffer(sx0, sy0, sx1, sy1, dx0, dy0, dx0 + (sx1 - sx0) * LOUPE_ZOOM, dy0 + (sy1 - sy0) * LOUPE_ZOOM, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glEnable(GL_SCISSOR_TEST);
+    const int cellX = left + half * LOUPE_ZOOM, cellY = top + half * LOUPE_ZOOM;
+    frameRect(cellX, cellY, LOUPE_ZOOM, LOUPE_ZOOM, 1, 0.f, 0.f, 0.f);
+    frameRect(cellX - 1, cellY - 1, LOUPE_ZOOM + 2, LOUPE_ZOOM + 2, 1, 1.f, 1.f, 1.f);
+    frameRect(left, top, size, size, LOUPE_RING, 1.f, 1.f, 1.f);
+    frameRect(left - LOUPE_RING, top - LOUPE_RING, size + 2 * LOUPE_RING, size + 2 * LOUPE_RING, 1, 0.f, 0.f, 0.f);
+}
+
+static void renderPicker(const PHLMONITOR& mon) {
+    auto fb = dynamicPointerCast<Render::GL::CGLFramebuffer>(g_pHyprRenderer->m_renderData.currentFB);
+    if (!fb || mon->m_transform != WL_OUTPUT_TRANSFORM_NORMAL)
+        return;
+    const int w = (int)fb->m_size.x, h = (int)fb->m_size.y;
+    if (w <= 0 || h <= 0)
+        return;
+    const float refWhite = monitorRefWhite(mon);
+    const bool  fp       = refWhite != 1.f;
+    auto&       frozen   = g_frozen[mon->m_name];
+    SGLState    st;
+    st.save();
+    GLfloat clear[4];
+    glGetFloatv(GL_COLOR_CLEAR_VALUE, clear);
+    glDisable(GL_SCISSOR_TEST);
+    if (!frozen.taken) {
+        if (frozen.w != w || frozen.h != h || frozen.fp != fp) {
+            makeTarget(frozen.tex, frozen.fb, w, h, fp);
+            frozen.w  = w;
+            frozen.h  = h;
+            frozen.fp = fp;
+        }
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, fb->getFBID());
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, frozen.fb);
+        glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        frozen.taken    = true;
+        frozen.refWhite = refWhite;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, frozen.fb);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fb->getFBID());
+    glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glEnable(GL_SCISSOR_TEST);
+    drawLoupe(mon, fb->getFBID(), frozen);
+    glClearColor(clear[0], clear[1], clear[2], clear[3]);
+    st.restore();
+}
+
+class CPickerElement : public IPassElement {
+  public:
+    CPickerElement(PHLMONITOR mon) : m_mon(mon) {}
+
+    std::vector<UP<IPassElement>> draw() override {
+        if (auto mon = m_mon.lock())
+            renderPicker(mon);
+        return {};
+    }
+    bool needsLiveBlur() override {
+        return false;
+    }
+    bool needsPrecomputeBlur() override {
+        return false;
+    }
+    const char* passName() override {
+        return "CVarunaPickerElement";
+    }
+    ePassElementType type() override {
+        return EK_CUSTOM;
+    }
+    std::optional<CBox> boundingBox() override {
+        const auto mon = m_mon.lock();
+        if (!mon)
+            return std::nullopt;
+        return CBox{{}, mon->m_size};
+    }
+    bool disableSimplification() override {
+        return true;
+    }
+
+  private:
+    PHLMONITORREF m_mon;
+};
+
+static void drawPicker(const PHLMONITOR& mon) {
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CPickerElement>(mon));
+}
+
+static float encodeSRGB(float linear) {
+    linear = std::clamp(linear, 0.f, 1.f);
+    return linear <= 0.0031308f ? linear * 12.92f : 1.055f * std::pow(linear, 1.f / 2.4f) - 0.055f;
+}
+
+static std::optional<std::string> pickedColour(const PHLMONITOR& mon, const Vector2D& global) {
+    const auto it = g_frozen.find(mon->m_name);
+    if (it == g_frozen.end() || !it->second.taken)
+        return std::nullopt;
+    const auto& frozen = it->second;
+    const auto  at     = (global - mon->m_position) * mon->m_scale;
+    const int   x = std::clamp((int)std::floor(at.x), 0, frozen.w - 1), y = std::clamp((int)std::floor(at.y), 0, frozen.h - 1);
+    Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+    GLint readFb = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFb);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, frozen.fb);
+    std::array<float, 3> rgb{};
+    if (frozen.fp) {
+        std::array<GLfloat, 4> px{};
+        glReadPixels(x, y, 1, 1, GL_RGBA, GL_FLOAT, px.data());
+        for (int i = 0; i < 3; i++)
+            rgb[i] = encodeSRGB(px[i] / frozen.refWhite);
+    } else {
+        std::array<GLubyte, 4> px{};
+        glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+        for (int i = 0; i < 3; i++)
+            rgb[i] = px[i] / 255.f;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, readFb);
+    const auto byte = [](float v) { return (int)std::lround(std::clamp(v, 0.f, 1.f) * 255.f); };
+    return std::format("#{:02x}{:02x}{:02x}", byte(rgb[0]), byte(rgb[1]), byte(rgb[2]));
+}
+
+static void forgetFrozen() {
+    for (auto& [name, frozen] : g_frozen)
+        frozen.taken = false;
+}
+
+static void freeFrozen() {
+    for (auto& [name, frozen] : g_frozen) {
+        glDeleteFramebuffers(1, &frozen.fb);
+        glDeleteTextures(1, &frozen.tex);
+    }
+    g_frozen.clear();
+}
+
 // ------------------------------------------------------- windows and menus --
 
 static std::optional<uint8_t> windowGlassKind(const PHLWINDOW& w) {
@@ -1098,6 +1279,11 @@ static void onRenderPre(PHLMONITOR mon) {
 }
 
 static void onRenderStage(eRenderStage stage) {
+    if (stage == RENDER_LAST_MOMENT) {
+        if (const auto mon = g_pHyprRenderer->m_renderData.pMonitor.lock())
+            picker::onRenderLast(mon);
+        return;
+    }
     if (stage != RENDER_POST_WINDOWS)
         return;
     const auto mon = g_pHyprRenderer->m_renderData.pMonitor.lock();
@@ -1142,6 +1328,10 @@ static void start() {
     zoom::init();
     wallpaper::init();
     minimize::g_drawGenie = drawGenie;
+    picker::g_draw        = drawPicker;
+    picker::g_colourAt    = pickedColour;
+    picker::g_forget      = forgetFrozen;
+    picker::init();
     static auto glassOnOpen = Event::bus()->m_events.window.open.listen([](PHLWINDOW w) { addWindowGlass(w); });
     for (const auto& w : Desktop::windowState()->windows())
         addWindowGlass(w);
@@ -1162,6 +1352,7 @@ static void start() {
 }
 
 static void stop() {
+    picker::stop();
     wallpaper::stop();
     edges::stop();
     zoom::stop();
@@ -1173,6 +1364,7 @@ static void stop() {
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();
     freeGL();
     freeGenieGL();
+    freeFrozen();
 }
 
 static const SHyprCtlCommand COMMAND = {.name = "varunaglass", .exact = false, .fn = onShapesCommand};
