@@ -58,6 +58,7 @@
 #include "keepclear.hpp"
 #include "requests.hpp"
 #include "minimize.hpp"
+#include "glass_protocol.hpp"
 #include "mission.hpp"
 #include "picker.hpp"
 #include "wallpaper.hpp"
@@ -447,6 +448,49 @@ static bool keyMatches(const std::string& key, const PHLLS& ls) {
     return ls->m_namespace == key.substr(0, at) && mon && mon->m_name == key.substr(at + 1);
 }
 
+static void applyShapes(const std::string& ns, uint8_t kind, bool lifted, std::vector<SShape> shapes) {
+    const bool changed = [&] {
+        static const std::vector<SShape> none;
+        const auto                       it  = g_shapes.find(ns);
+        const auto&                      old = it == g_shapes.end() ? none : it->second;
+        if (old.size() != shapes.size())
+            return true;
+        for (size_t i = 0; i < old.size(); i++)
+            if (old[i].x != shapes[i].x || old[i].y != shapes[i].y || old[i].w != shapes[i].w || old[i].h != shapes[i].h)
+                return true;
+        return false;
+    }();
+    std::vector<SShape> old;
+    if (const auto it = g_shapes.find(ns); it != g_shapes.end())
+        old = it->second;
+    // Redraw only where glass was or will be (plus what the lens can see):
+    // the dock sends a new shape every frame while it magnifies.
+    if (changed)
+        for (const auto& ls : Desktop::layerState()->layers()) {
+            if (!ls || !keyMatches(ns, ls))
+                continue;
+            for (const auto* list : {&old, &shapes})
+                for (const auto& sh : *list) {
+                    // Global layout coordinates; also schedules the frame.
+                    CBox b{ls->m_geometry.x + sh.x, ls->m_geometry.y + sh.y, sh.w, sh.h};
+                    g_pHyprRenderer->damageBox(b.expand(reach(std::max({g_settings.blur, g_settings.platterBlur, g_settings.barBlur})) + 10));
+                }
+        }
+    // An empty list forgets the namespace (banners come and go by the dozen).
+    if (shapes.empty()) {
+        g_shapes.erase(ns);
+        g_kind.erase(ns);
+        g_lifted.erase(ns);
+    } else {
+        g_shapes[ns] = std::move(shapes);
+        g_kind[ns]   = kind;
+        if (lifted)
+            g_lifted.insert(ns);
+        else
+            g_lifted.erase(ns);
+    }
+}
+
 static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     // "varunaglass shapes <namespace> [x,y,w,h,r;...]"
     std::istringstream in(request);
@@ -454,7 +498,7 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     in >> cmd >> sub;
     // Minimizing into the Dock (minimize.hpp).
     if (sub == "features")
-        return "minimize fullscreen edges wallpaper pick desktopglass mission";
+        return "minimize fullscreen edges wallpaper pick desktopglass mission glassprotocol";
     if (sub == "minimize" || sub == "restore" || sub == "snapinfo" || sub == "where")
         return minimize::command(sub, in);
     // Snapping a floating window (snap.hpp).
@@ -503,46 +547,7 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
         if (n >= 5 && sh.w > 1 && sh.h > 1)
             shapes.push_back(sh);
     }
-    const bool changed = [&] {
-        static const std::vector<SShape> none;
-        const auto                       it  = g_shapes.find(ns);
-        const auto&                      old = it == g_shapes.end() ? none : it->second;
-        if (old.size() != shapes.size())
-            return true;
-        for (size_t i = 0; i < old.size(); i++)
-            if (old[i].x != shapes[i].x || old[i].y != shapes[i].y || old[i].w != shapes[i].w || old[i].h != shapes[i].h)
-                return true;
-        return false;
-    }();
-    std::vector<SShape> old;
-    if (const auto it = g_shapes.find(ns); it != g_shapes.end())
-        old = it->second;
-    // Redraw only where glass was or will be (plus what the lens can see):
-    // the dock sends a new shape every frame while it magnifies.
-    if (changed)
-        for (const auto& ls : Desktop::layerState()->layers()) {
-            if (!ls || !keyMatches(ns, ls))
-                continue;
-            for (const auto* list : {&old, &shapes})
-                for (const auto& sh : *list) {
-                    // Global layout coordinates; also schedules the frame.
-                    CBox b{ls->m_geometry.x + sh.x, ls->m_geometry.y + sh.y, sh.w, sh.h};
-                    g_pHyprRenderer->damageBox(b.expand(reach(std::max({g_settings.blur, g_settings.platterBlur, g_settings.barBlur})) + 10));
-                }
-        }
-    // An empty list forgets the namespace (banners come and go by the dozen).
-    if (shapes.empty()) {
-        g_shapes.erase(ns);
-        g_kind.erase(ns);
-        g_lifted.erase(ns);
-    } else {
-        g_shapes[ns] = std::move(shapes);
-        g_kind[ns]   = kind;
-        if (lifted)
-            g_lifted.insert(ns);
-        else
-            g_lifted.erase(ns);
-    }
+    applyShapes(ns, kind, lifted, std::move(shapes));
     return "ok";
 }
 
@@ -1347,6 +1352,13 @@ static void start() {
         g_pHyprRenderer->m_renderPass.add(makeUnique<CGlassElement>(mon, backdrop));
     };
     picker::init();
+    glass_protocol::init([](const std::string& key, uint8_t kind, bool lifted, std::vector<glass_protocol::SPiece> pieces) {
+        std::vector<SShape> shapes;
+        for (const auto& p : pieces)
+            if (p.w > 1 && p.h > 1)
+                shapes.push_back({p.x, p.y, p.w, p.h, p.radius, p.tint, p.sx, p.sy});
+        applyShapes(key, kind <= KIND_BACKDROP ? kind : (uint8_t)KIND_CLEAR, lifted, std::move(shapes));
+    });
     static auto glassOnOpen = Event::bus()->m_events.window.open.listen([](PHLWINDOW w) { addWindowGlass(w); });
     for (const auto& w : Desktop::windowState()->windows())
         addWindowGlass(w);
@@ -1367,6 +1379,7 @@ static void start() {
 }
 
 static void stop() {
+    glass_protocol::stop();
     mission::stop();
     picker::stop();
     wallpaper::stop();

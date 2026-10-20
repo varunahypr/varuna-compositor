@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="varuna_glass_v1">
+  <copyright>
+    Copyright © 2026 Varuna contributors
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the "Software"),
+    to deal in the Software without restriction, including without limitation
+    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+    and/or sell copies of the Software, and to permit persons to whom the
+    Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice (including the next
+    paragraph) shall be included in all copies or substantial portions of the
+    Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+    DEALINGS IN THE SOFTWARE.
+  </copyright>
+
+  <description summary="liquid glass behind a surface">
+    Varuna's shell asks varuna-compositor to draw pieces of liquid glass
+    behind its layer surfaces: the live screen behind each piece, blurred and
+    refracted. The pieces are part of the surface's state, so they move with
+    its content on the same frame.
+  </description>
+
+  <interface name="varuna_glass_manager_v1" version="1">
+    <request name="destroy" type="destructor">
+      <description summary="destroy the manager">
+        Glass objects already made stay valid.
+      </description>
+    </request>
+
+    <request name="get_glass">
+      <description summary="glass for a surface">
+        Make the glass object for a layer surface. A surface has at most one.
+      </description>
+      <arg name="id" type="new_id" interface="varuna_glass_v1"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+
+    <enum name="error">
+      <entry name="already_has_glass" value="0" summary="the surface already has a glass object"/>
+    </enum>
+  </interface>
+
+  <interface name="varuna_glass_v1" version="1">
+    <description summary="the glass behind one surface">
+      All state is double-buffered: it applies on the next wl_surface.commit.
+      Until then the pieces already applied keep being drawn.
+    </description>
+
+    <enum name="kind">
+      <entry name="clear" value="0" summary="the Dock's clear lens"/>
+      <entry name="platter" value="1" summary="a frosted platter"/>
+      <entry name="veil" value="2" summary="clear glass under a white veil"/>
+      <entry name="bar" value="3" summary="always frosted, for the menu bar"/>
+      <entry name="liquid" value="4" summary="a drop, pulled out as it moves"/>
+      <entry name="backdrop" value="5" summary="the screen out of focus, dimmed"/>
+    </enum>
+
+    <request name="destroy" type="destructor">
+      <description summary="no more glass">
+        The glass goes with the surface's next commit.
+      </description>
+    </request>
+
+    <request name="set_look">
+      <description summary="what the pieces look like">
+        Lifted pieces cast a deeper shadow.
+      </description>
+      <arg name="kind" type="uint" enum="kind"/>
+      <arg name="lifted" type="uint"/>
+    </request>
+
+    <request name="set_pieces">
+      <description summary="replace the pieces">
+        The pieces, surface-local logical pixels: per piece x, y, width,
+        height, corner radius, tint (0xrrggbb, or -1 for none) and, for a
+        liquid drop, its stretch along x and y in thousandths. An empty array
+        clears the glass.
+      </description>
+      <arg name="pieces" type="array" summary="int32 x8 per piece; geometry in 1/256 px"/>
+    </request>
+  </interface>
+</protocol>
