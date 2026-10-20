@@ -377,6 +377,7 @@ struct SGlass {
     float   opacity = 1.f;  // its surface's fade (opening, closing)
     SP<Render::ITexture> mask;
     CBox         maskBox;
+    bool         onDesktop = false;
 };
 
 /// What a piece of glass looks like: clear (Dock), platter (the switcher),
@@ -452,7 +453,7 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     in >> cmd >> sub;
     // Minimizing into the Dock (minimize.hpp).
     if (sub == "features")
-        return "minimize fullscreen edges wallpaper pick";
+        return "minimize fullscreen edges wallpaper pick desktopglass";
     if (sub == "minimize" || sub == "restore" || sub == "snapinfo" || sub == "where")
         return minimize::command(sub, in);
     // Snapping a floating window (snap.hpp).
@@ -583,6 +584,7 @@ static std::vector<SGlass> glassesFor(const PHLMONITOR& mon) {
                 const bool lifted = g_lifted.contains(it->first);
                 const float   shadow = kind == KIND_BACKDROP ? 0.f : kind == KIND_LIQUID ? 26.f : lifted ? LIFTED_SHADOW : 10.f;
                 out.push_back({b, sh.radius, shadow, kind, sh.tint, sh.sx, sh.sy, lifted, alpha});
+                out.back().onDesktop = ls->m_layer <= ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM;
             }
             continue;
         }
@@ -1284,16 +1286,21 @@ static void onRenderStage(eRenderStage stage) {
             picker::onRenderLast(mon);
         return;
     }
-    if (stage != RENDER_POST_WINDOWS)
+    if (stage != RENDER_POST_WALLPAPER && stage != RENDER_POST_WINDOWS)
         return;
     const auto mon = g_pHyprRenderer->m_renderData.pMonitor.lock();
     if (!mon)
         return;
-    // Minimizing windows draw over the others, under the Dock's glass.
-    minimize::onRenderStage(mon);
-    // Where a dragged window would snap.
-    snap::render(mon);
+    const bool onDesktop = stage == RENDER_POST_WALLPAPER;
+    if (!onDesktop) {
+        // Minimizing windows draw over the others, under the Dock's glass.
+        minimize::onRenderStage(mon);
+        // Where a dragged window would snap.
+        snap::render(mon);
+    }
     for (const auto& g : glassesFor(mon)) {
+        if (g.onDesktop != onDesktop)
+            continue;
         g_pHyprRenderer->m_renderPass.add(makeUnique<CGlassElement>(mon, g));
         // The drop keeps moving: draw it again next frame.
         if (g.kind == KIND_LIQUID)
