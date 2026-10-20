@@ -15,6 +15,7 @@
 #include "../../managers/fullscreen/FullscreenController.hpp"
 
 #include <hyprutils/utils/ScopeGuard.hpp>
+#include "../../varuna/Varuna.hpp"
 
 using namespace Hyprutils::Utils;
 using namespace Layout;
@@ -68,7 +69,10 @@ void CWindowTarget::updatePos(uint8_t flags) {
 
     // Non-FS Floating Windows
     if (floating() && m_window && !Fullscreen::controller()->isFullscreen(m_window.lock())) {
+        const bool KEPT_CLEAR = Varuna::keepClear(m_window.lock(), m_box.logicalBox);
         m_window->setBox(m_box.logicalBox);
+        if (KEPT_CLEAR)
+            warpPositionSize();
 
         if (CONFIGURECLIENT)
             m_window->sendWindowSize();

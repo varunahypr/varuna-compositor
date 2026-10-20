@@ -807,7 +807,7 @@ void CGlassElement::render(const PHLMONITOR& mon) {
 static void onRenderPre(PHLMONITOR mon) {
     minimize::onRenderPre(mon);
     dnd::track();
-    keepclear::clamp(mon);
+    keepclear::onRenderPre(mon);
     loadSettings();
     // If anything the lens can see changed, redraw all it sees this frame
     // (added to the monitor's damage ring, so every buffer stays consistent).
@@ -935,4 +935,8 @@ bool Varuna::onMaximizeRequest(const PHLWINDOW& window, bool on) {
 
 void Varuna::onDraggedOutOfTiling(const SP<Layout::ITarget>& target, const CBox& tiled) {
     drag::onDraggedOutOfTiling(target, tiled);
+}
+
+bool Varuna::keepClear(const PHLWINDOW& window, CBox& box) {
+    return keepclear::keepClear(window, box);
 }
