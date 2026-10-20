@@ -742,3 +742,4 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/varuna-include)
 file(CREATE_LINK ${CMAKE_SOURCE_DIR} ${CMAKE_BINARY_DIR}/varuna-include/hyprland SYMBOLIC)
 set_source_files_properties(src/varuna/Varuna.cpp PROPERTIES
   INCLUDE_DIRECTORIES "${CMAKE_BINARY_DIR}/varuna-include;${CMAKE_SOURCE_DIR}/src/varuna")
+install(CODE "file(CREATE_LINK \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/Hyprland\" \"\$ENV{DESTDIR}${CMAKE_INSTALL_FULL_BINDIR}/Varuna\")")

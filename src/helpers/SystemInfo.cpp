@@ -69,9 +69,9 @@ std::string SystemInfo::getVersion(eHyprCtlOutputFormat fmt) {
     std::ranges::replace(commitMsg, '#', ' ');
 
     if (fmt == eHyprCtlOutputFormat::FORMAT_NORMAL) {
-        std::string result = std::format("Hyprland {} built from branch {} at commit {} {} ({}).\n"
-                                         "Date: {}\n"
-                                         "Tag: {}, commits: {}\n",
+        std::string result = std::format("Varuna Compositor {0}, based on Hyprland {0}, built from branch {1} at commit {2} {3} ({4}).\n"
+                                         "Date: {5}\n"
+                                         "Tag: {6}, commits: {7}\n",
                                          HYPRLAND_VERSION, GIT_BRANCH, GIT_COMMIT_HASH, GIT_DIRTY, commitMsg, GIT_COMMIT_DATE, GIT_TAG, GIT_COMMITS);
 
         result += "\n";
@@ -99,6 +99,7 @@ std::string SystemInfo::getVersion(eHyprCtlOutputFormat fmt) {
     } else {
         std::string result = std::format(
             R"#({{
+    "name": "Varuna Compositor",
     "branch": "{}",
     "commit": "{}",
     "version": "{}",

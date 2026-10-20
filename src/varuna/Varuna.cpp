@@ -32,6 +32,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <sys/prctl.h>
 #include <sys/stat.h>
 
 // The drag icon fix (dnd.hpp) needs CWLDataDeviceProtocol::m_dnd, which is
@@ -902,6 +903,7 @@ static void stop() {
 static const SHyprCtlCommand COMMAND = {.name = "varunaglass", .exact = false, .fn = onShapesCommand};
 
 static const bool g_announced = setenv("VARUNA_COMPOSITOR", "1", 1) == 0;
+static const bool g_named     = prctl(PR_SET_NAME, "Varuna") == 0;
 
 void Varuna::init() {
     start();
