@@ -6,6 +6,7 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <hyprland/src/desktop/state/WindowState.hpp>
@@ -161,11 +162,13 @@ namespace mission {
         hints.modifs.emplace_back(Render::SRenderModifData::eRenderModifType::RMOD_TYPE_TRANSLATE, at / scale);
         hints.modifs.emplace_back(Render::SRenderModifData::eRenderModifType::RMOD_TYPE_SCALE, scale);
         g_pHyprRenderer->m_renderPass.add(makeUnique<CRendererHintsPassElement>(CRendererHintsPassElement::SData{hints}));
-        const bool onShownDesktop = w->m_workspace && w->m_workspace->isVisible() && !w->isHidden();
+        const bool     onShownDesktop = w->m_workspace && w->m_workspace->isVisible() && !w->isHidden();
+        const Vector2D nudged         = std::exchange(w->m_floatingOffset, Vector2D{});
         if (onShownDesktop)
             withAlpha(w, p.alpha, [&] { g_pHyprRenderer->renderWindowAtOrigin(w, mon, false); });
         else
             g_pHyprRenderer->renderWindowAtOrigin(w, mon, true);
+        w->m_floatingOffset = nudged;
         g_pHyprRenderer->m_renderPass.add(makeUnique<CRendererHintsPassElement>(CRendererHintsPassElement::SData{Render::SRenderModifData{}}));
     }
 
