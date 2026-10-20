@@ -92,3 +92,8 @@ void CXDGDecorationProtocol::onGetDecoration(CZxdgDecorationManagerV1* pMgr, uin
         return;
     }
 }
+
+bool CXDGDecorationProtocol::requestsServerSide(wl_resource* toplevel) {
+    const auto IT = m_decorations.find(toplevel);
+    return IT != m_decorations.end() && IT->second && IT->second->mostRecentlyRequested != ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE;
+}

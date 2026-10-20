@@ -36,26 +36,10 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-// The drag icon fix (dnd.hpp) needs CWLDataDeviceProtocol::m_dnd, which is
-// private: include DataDevice.hpp's dependencies normally, then it alone
-// with private made public.
-#include <any>
-#include <hyprland/src/protocols/core/Compositor.hpp>
-#include <hyprland/src/protocols/WaylandProtocol.hpp>
-#include <hyprland/src/protocols/types/DataDevice.hpp>
-#include <hyprland/src/helpers/signal/Signal.hpp>
-#include <hyprutils/math/Edges.hpp>
 #include <hyprland/protocols/xdg-shell.hpp>
-#include <hyprland/src/helpers/math/Math.hpp>
-#include <hyprland/src/protocols/types/SurfaceRole.hpp>
 #include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
-// Likewise CXDGToplevelResource::m_resource, to announce minimize support
-// (requests.hpp).
-#define private public
-#include <hyprland/src/protocols/core/DataDevice.hpp>
 #include <hyprland/src/protocols/XDGShell.hpp>
-#undef private
 #include <hyprland/src/desktop/state/LayerState.hpp>
 #include <hyprland/src/desktop/view/LayerSurface.hpp>
 #include <hyprland/protocols/wlr-layer-shell-unstable-v1.hpp>
@@ -70,12 +54,10 @@
 #include <hyprland/src/render/gl/GLFramebuffer.hpp>
 #include <hyprland/src/render/pass/PassElement.hpp>
 
-#include "dnd.hpp"
 #include "drag.hpp"
 #include "keepclear.hpp"
 #include "requests.hpp"
 #include "minimize.hpp"
-#include "popups.hpp"
 #include "edge.hpp"
 #include "snap.hpp"
 #include "corners.hpp"
@@ -806,7 +788,6 @@ void CGlassElement::render(const PHLMONITOR& mon) {
 
 static void onRenderPre(PHLMONITOR mon) {
     minimize::onRenderPre(mon);
-    dnd::track();
     keepclear::onRenderPre(mon);
     loadSettings();
     // If anything the lens can see changed, redraw all it sees this frame
@@ -871,7 +852,6 @@ static void start() {
     requests::init();
     drag::init();
     keepclear::init();
-    popups::init();
     // Before snapping: it sees the pointer held at a monitor's edge.
     edge::init();
     edge::g_held = [] { snap::onMove(); };
@@ -903,7 +883,6 @@ static void stop() {
     titlebar::stop();
     snap::stop();
     minimize::stop();
-    dnd::stop();
     requests::stop();
     g_pHyprRenderer->m_renderPass.removeAllOfType("CVarunaGlassElement");
     Render::GL::g_pHyprOpenGL->makeEGLCurrent();

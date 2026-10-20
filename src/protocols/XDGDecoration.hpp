@@ -30,6 +30,8 @@ class CXDGDecorationProtocol : public IWaylandProtocol {
 
     virtual void bindManager(wl_client* client, void* data, uint32_t ver, uint32_t id);
 
+    bool         requestsServerSide(wl_resource* toplevel);
+
   private:
     void onManagerResourceDestroy(wl_resource* res);
     void destroyDecoration(CXDGDecoration* decoration);

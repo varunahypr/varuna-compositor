@@ -24,9 +24,7 @@
 #include <hyprland/src/render/pass/RectPassElement.hpp>
 #include <hyprland/src/render/pass/TexPassElement.hpp>
 #include <hyprland/src/xwayland/XSurface.hpp>
-#define private public
 #include <hyprland/src/protocols/XDGDecoration.hpp>
-#undef private
 
 #include "requests.hpp"
 
@@ -101,11 +99,7 @@ static bool drawsNoTitleBar(const PHLWINDOW& w) {
     }
     const auto surface  = w->m_xdgSurface.lock();
     const auto toplevel = surface ? surface->m_toplevel.lock() : nullptr;
-    if (!toplevel || !toplevel->m_resource || !PROTO::xdgDecoration)
-        return false;
-    const auto& decorations = PROTO::xdgDecoration->m_decorations;
-    const auto  it          = decorations.find(toplevel->m_resource->resource());
-    return it != decorations.end() && it->second && it->second->mostRecentlyRequested != ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE;
+    return toplevel && toplevel->wlResource() && PROTO::xdgDecoration && PROTO::xdgDecoration->requestsServerSide(toplevel->wlResource());
 }
 
 static void circle(cairo_t* cr, double cx, double cy, double r) {

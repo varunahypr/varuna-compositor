@@ -169,6 +169,8 @@ CXDGToplevelResource::CXDGToplevelResource(SP<CXdgToplevel> resource_, SP<CXDGSu
         *p     = XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN;
         p      = sc<uint32_t*>(wl_array_add(&arr, sizeof(uint32_t)));
         *p     = XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE;
+        p      = sc<uint32_t*>(wl_array_add(&arr, sizeof(uint32_t)));
+        *p     = XDG_TOPLEVEL_WM_CAPABILITIES_MINIMIZE;
         m_resource->sendWmCapabilities(&arr);
         wl_array_release(&arr);
     }
@@ -345,6 +347,10 @@ SP<CXDGToplevelResource> CXDGToplevelResource::fromResource(wl_resource* res) {
 
 bool CXDGToplevelResource::good() {
     return m_resource->resource();
+}
+
+wl_resource* CXDGToplevelResource::wlResource() {
+    return m_resource ? m_resource->resource() : nullptr;
 }
 
 bool CXDGToplevelResource::anyChildModal() {

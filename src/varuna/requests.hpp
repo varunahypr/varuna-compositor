@@ -23,10 +23,6 @@
 //
 // X11 apps' maximize requests become varunazoom / varunafill the same way;
 // their full screen stays Hyprland's.
-//
-// Hyprland also tells apps it can only maximize and go full screen, so GTK
-// greys out the minimize button; now that minimize works, each window is
-// told it can minimize too.
 #pragma once
 
 #include <chrono>
@@ -97,21 +93,6 @@ static void post(const char* event, const PHLWINDOW& w, bool on) {
     g_pEventManager->postEvent(SHyprIPCEvent{.event = event, .data = std::format("{:x},{}", rc<uintptr_t>(w.get()), on ? 1 : 0)});
 }
 
-// wm_capabilities: fullscreen and maximize (as Hyprland sends) plus minimize,
-// applied by the app with the next configure.
-static void announceMinimize(const SP<CXDGToplevelResource>& toplevel) {
-    if (!toplevel->m_resource || toplevel->m_resource->version() < 5)
-        return;
-    wl_array caps;
-    wl_array_init(&caps);
-    for (const auto cap : {XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN, XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE, XDG_TOPLEVEL_WM_CAPABILITIES_MINIMIZE})
-        *sc<uint32_t*>(wl_array_add(&caps, sizeof(uint32_t))) = cap;
-    toplevel->m_resource->sendWmCapabilities(&caps);
-    wl_array_release(&caps);
-    if (const auto surface = toplevel->m_owner.lock())
-        surface->scheduleConfigure();
-}
-
 static bool onFullscreenRequest(const PHLWINDOW& w, bool on) {
     if (w->m_isX11)
         return false;
@@ -143,7 +124,6 @@ static void watch(const PHLWINDOW& w) {
     const auto toplevel = surface ? surface->m_toplevel.lock() : nullptr;
     if (!toplevel)
         return;
-    announceMinimize(toplevel);
     WP<CXDGToplevelResource> top = toplevel;
     // The request flags are only set while stateChanged is being emitted.
     auto listener = toplevel->m_events.stateChanged.listen([ref, top] {

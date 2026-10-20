@@ -110,6 +110,7 @@ class CXDGToplevelResource {
     PHLWINDOWREF                    m_window;
 
     bool                            good();
+    wl_resource*                    wlResource();
     Vector2D                        layoutMinSize();
     Vector2D                        layoutMaxSize();
 
