@@ -29,7 +29,7 @@ namespace mission {
     struct SPreview {
         std::string address;
         CBox        box;
-        float       alpha  = 1.F;
+        float       alpha = 1.F;
         std::string wallOf;
         float       radius = 0.F;
     };
@@ -100,7 +100,7 @@ namespace mission {
         in >> scrim;
         std::getline(in >> std::ws, list);
         SScene scene;
-        scene.fade = std::clamp(std::stof(fade), 0.F, 1.F);
+        scene.fade    = std::clamp(std::stof(fade), 0.F, 1.F);
         unsigned rgba = 0;
         if (std::sscanf(scrim.c_str(), "%8x", &rgba) == 1)
             scene.scrim = CHyprColor(((rgba >> 24) & 0xff) / 255.F, ((rgba >> 16) & 0xff) / 255.F, ((rgba >> 8) & 0xff) / 255.F, (rgba & 0xff) / 255.F);
@@ -156,8 +156,8 @@ namespace mission {
         const auto size = w->size(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
         if (size.x < 1 || size.y < 1)
             return;
-        const Vector2D at     = (ls->m_geometry.pos() + p.box.pos() - mon->m_position) * mon->m_scale;
-        const float    scale  = sc<float>(p.box.w / size.x);
+        const Vector2D           at    = (ls->m_geometry.pos() + p.box.pos() - mon->m_position) * mon->m_scale;
+        const float              scale = sc<float>(p.box.w / size.x);
         Render::SRenderModifData hints;
         hints.modifs.emplace_back(Render::SRenderModifData::eRenderModifType::RMOD_TYPE_TRANSLATE, at / scale);
         hints.modifs.emplace_back(Render::SRenderModifData::eRenderModifType::RMOD_TYPE_SCALE, scale);

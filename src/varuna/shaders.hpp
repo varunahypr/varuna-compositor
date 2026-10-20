@@ -1,12 +1,12 @@
 // Generated from crates/varuna-glass/src/shaders. Do not edit.
 #pragma once
-static const char* QUAD_VERT = R"GLSL(// Fullscreen triangle; positions come from a 3-vertex buffer.
+static const char* QUAD_VERT  = R"GLSL(// Fullscreen triangle; positions come from a 3-vertex buffer.
 in vec2 a_pos;
 void main() {
     gl_Position = vec4(a_pos, 0.0, 1.0);
 }
 )GLSL";
-static const char* BLUR_FRAG = R"GLSL(// One direction of a separable Gaussian blur over the backdrop texture.
+static const char* BLUR_FRAG  = R"GLSL(// One direction of a separable Gaussian blur over the backdrop texture.
 // Target and source have the same size, so gl_FragCoord maps 1:1.
 uniform sampler2D u_tex;
 uniform vec2 u_texel;   // 1 / texture size

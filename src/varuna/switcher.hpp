@@ -19,7 +19,7 @@ namespace switcher {
     static bool                             g_open = false;
     static std::vector<CHyprSignalListener> g_watching;
 
-    static void say(const char* what) {
+    static void                             say(const char* what) {
         g_pEventManager->postEvent(SHyprIPCEvent{.event = "varunaswitcher", .data = what});
     }
 
@@ -29,7 +29,7 @@ namespace switcher {
 
     static constexpr uint32_t XKB_OFFSET = 8;
 
-    static xkb_keysym_t symbolOf(uint32_t keycode) {
+    static xkb_keysym_t       symbolOf(uint32_t keycode) {
         const auto keyboard = g_pSeatManager->m_keyboard.lock();
         if (!keyboard)
             return XKB_KEY_NoSymbol;

@@ -19,13 +19,13 @@
 
 namespace places {
 
-    static constexpr double MIN_W = 220, MIN_H = 160;
-    static constexpr const char* SIZES_ITSELF_CLASS = "dev.varuna.Files";
-    static constexpr const char* SIZES_ITSELF_TITLE = "Quick Look: ";
+    static constexpr double            MIN_W = 220, MIN_H = 160;
+    static constexpr const char*       SIZES_ITSELF_CLASS = "dev.varuna.Files";
+    static constexpr const char*       SIZES_ITSELF_TITLE = "Quick Look: ";
 
     static std::map<std::string, CBox> g_places;
 
-    static std::string filePath() {
+    static std::string                 filePath() {
         const char* state = std::getenv("XDG_STATE_HOME");
         const char* home  = std::getenv("HOME");
         std::string base  = state && *state ? state : std::string(home ? home : "/tmp") + "/.local/state";
@@ -49,8 +49,8 @@ namespace places {
     }
 
     static bool keepable(const PHLWINDOW& w) {
-        return w && w->m_isMapped && w->m_isFloating && !sizesItself(w) && w->m_workspace && !w->m_workspace->m_isSpecialWorkspace &&
-            !Fullscreen::controller()->isFullscreen(w) && !w->m_minimized;
+        return w && w->m_isMapped && w->m_isFloating && !sizesItself(w) && w->m_workspace && !w->m_workspace->m_isSpecialWorkspace && !Fullscreen::controller()->isFullscreen(w) &&
+            !w->m_minimized;
     }
 
     static bool firstOfItsApp(const PHLWINDOW& w) {
@@ -79,8 +79,8 @@ namespace places {
     static void onOpen(const PHLWINDOW& w) {
         if (!keepable(w) || !firstOfItsApp(w))
             return;
-        const auto it = g_places.find(w->m_class);
-        const auto mon = w->m_monitor.lock();
+        const auto it      = g_places.find(w->m_class);
+        const auto mon     = w->m_monitor.lock();
         const auto target_ = w->layoutTarget();
         if (it == g_places.end() || !mon || !target_)
             return;
@@ -94,8 +94,8 @@ namespace places {
         if (box.w < MIN_W || box.h < MIN_H)
             return;
         g_pEventManager->postEvent(SHyprIPCEvent{.event = "varunaclosedplace",
-                                                 .data  = std::format("{:x},{},{},{},{},{}", reinterpret_cast<uintptr_t>(w.get()), (int)std::round(box.x),
-                                                                      (int)std::round(box.y), (int)std::round(box.w), (int)std::round(box.h), w->m_class)});
+                                                 .data  = std::format("{:x},{},{},{},{},{}", reinterpret_cast<uintptr_t>(w.get()), (int)std::round(box.x), (int)std::round(box.y),
+                                                                      (int)std::round(box.w), (int)std::round(box.h), w->m_class)});
     }
 
     static std::string command(std::istream& in) {

@@ -22,69 +22,69 @@
 
 namespace edge {
 
-/// How far to push past the edge to cross: the pointer, a dragged window.
-static constexpr double PUSH = 28.0, PUSH_DRAGGING = 140.0;
-/// A rest this long at the edge starts the push over.
-static constexpr auto REST = std::chrono::milliseconds(500);
+    /// How far to push past the edge to cross: the pointer, a dragged window.
+    static constexpr double PUSH = 28.0, PUSH_DRAGGING = 140.0;
+    /// A rest this long at the edge starts the push over.
+    static constexpr auto REST = std::chrono::milliseconds(500);
 
-/// Told after the pointer is held at an edge (the move that put it there
-/// was dropped, so other listeners don't see it): snapping's zone.
-static void (*g_held)() = nullptr;
+    /// Told after the pointer is held at an edge (the move that put it there
+    /// was dropped, so other listeners don't see it): snapping's zone.
+    static void (*g_held)() = nullptr;
 
-static Vector2D                              g_last{-1, -1};
-static double                                g_pushed = 0;
-static std::chrono::steady_clock::time_point g_lastPush{};
+    static Vector2D                              g_last{-1, -1};
+    static double                                g_pushed = 0;
+    static std::chrono::steady_clock::time_point g_lastPush{};
 
-static PHLMONITOR monitorAt(const Vector2D& p) {
-    return State::monitorState()->query().vec(p).run();
-}
+    static PHLMONITOR                            monitorAt(const Vector2D& p) {
+        return State::monitorState()->query().vec(p).run();
+    }
 
-/// `p` brought back inside `box` (by less than a pixel at its edge).
-static Vector2D inside(const Vector2D& p, const CBox& box) {
-    return {std::clamp(p.x, box.x, box.x + box.w - 0.5), std::clamp(p.y, box.y, box.y + box.h - 0.5)};
-}
+    /// `p` brought back inside `box` (by less than a pixel at its edge).
+    static Vector2D inside(const Vector2D& p, const CBox& box) {
+        return {std::clamp(p.x, box.x, box.x + box.w - 0.5), std::clamp(p.y, box.y, box.y + box.h - 0.5)};
+    }
 
-static void onMove(Event::SCallbackInfo& info) {
-    const auto& ptr = Pointer::mgr();
-    if (!ptr)
-        return;
-    const Vector2D now = ptr->position();
-    const Vector2D was = g_last;
-    g_last             = now;
-    if (was.x < 0)
-        return;
-    const auto from = monitorAt(was), to = monitorAt(now);
-    if (!from || !to)
-        return;
-    if (from == to) {
-        // Back away from the edge: the next crossing starts over.
-        if (from->logicalBox().copy().expand(-3).containsPoint(now))
+    static void onMove(Event::SCallbackInfo& info) {
+        const auto& ptr = Pointer::mgr();
+        if (!ptr)
+            return;
+        const Vector2D now = ptr->position();
+        const Vector2D was = g_last;
+        g_last             = now;
+        if (was.x < 0)
+            return;
+        const auto from = monitorAt(was), to = monitorAt(now);
+        if (!from || !to)
+            return;
+        if (from == to) {
+            // Back away from the edge: the next crossing starts over.
+            if (from->logicalBox().copy().expand(-3).containsPoint(now))
+                g_pushed = 0;
+            return;
+        }
+        const auto clock = std::chrono::steady_clock::now();
+        if (clock - g_lastPush > REST)
             g_pushed = 0;
-        return;
+        g_lastPush          = clock;
+        const auto&  dc     = g_layoutManager->dragController();
+        const bool   drag   = dc && dc->target() && dc->mode() == MBIND_MOVE;
+        const double needed = drag ? PUSH_DRAGGING : PUSH;
+        g_pushed += now.distance(was);
+        if (g_pushed >= needed) {
+            g_pushed = 0;
+            return;
+        }
+        // Held: back on the edge of the screen it was on.
+        const Vector2D back = inside(now, from->logicalBox());
+        ptr->warpTo(back);
+        g_last         = back;
+        info.cancelled = true;
+        if (g_held)
+            g_held();
     }
-    const auto clock = std::chrono::steady_clock::now();
-    if (clock - g_lastPush > REST)
-        g_pushed = 0;
-    g_lastPush = clock;
-    const auto& dc      = g_layoutManager->dragController();
-    const bool  drag    = dc && dc->target() && dc->mode() == MBIND_MOVE;
-    const double needed = drag ? PUSH_DRAGGING : PUSH;
-    g_pushed += now.distance(was);
-    if (g_pushed >= needed) {
-        g_pushed = 0;
-        return;
-    }
-    // Held: back on the edge of the screen it was on.
-    const Vector2D back = inside(now, from->logicalBox());
-    ptr->warpTo(back);
-    g_last         = back;
-    info.cancelled = true;
-    if (g_held)
-        g_held();
-}
 
-static void init() {
-    static auto move = Event::bus()->m_events.input.mouse.move.listen([](Vector2D, Event::SCallbackInfo& info) { onMove(info); });
-}
+    static void init() {
+        static auto move = Event::bus()->m_events.input.mouse.move.listen([](Vector2D, Event::SCallbackInfo& info) { onMove(info); });
+    }
 
 } // namespace edge

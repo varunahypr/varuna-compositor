@@ -89,17 +89,17 @@ struct SSurface {
 
 // Values come from glass.conf, checked against glass.def (see settingsFrom).
 struct SSettings {
-    bool     enabled;
-    float    refraction, thickness, blur, tint, lift, rim, saturation;
-    float    tintR, tintG, tintB;
+    bool  enabled;
+    float refraction, thickness, blur, tint, lift, rim, saturation;
+    float tintR, tintG, tintB;
     // "Platter" glass (Control Center tiles): frosted, tinted with the theme.
-    float    platterBlur, platterTint, platterLift, platterSaturation, platterRim;
-    float    platterR, platterG, platterB;
+    float platterBlur, platterTint, platterLift, platterSaturation, platterRim;
+    float platterR, platterG, platterB;
     // "Veil" glass (bar, Control Center): the platter's lens with a slight
     // black tint, bright backdrop capped (veilLift < 0), under white text.
-    float    veilTint, veilLift;
+    float veilTint, veilLift;
     // Veil glass (Control Center…): white frost over the Dock's lens.
-    float    veilWhite;
+    float veilWhite;
     // The top bar: veil glass always frosted (its own blur).
     float    barBlur;
     SSurface dock, bar;
@@ -108,12 +108,12 @@ struct SSettings {
     bool     genie;
 };
 
-static SSettings        g_settings;
-static std::string      g_confPath;
-static timespec         g_confMtime{};
+static SSettings                             g_settings;
+static std::string                           g_confPath;
+static timespec                              g_confMtime{};
 static std::chrono::steady_clock::time_point g_lastConfCheck{};
 
-static std::string confPath() {
+static std::string                           confPath() {
     const char* cache = std::getenv("XDG_CACHE_HOME");
     const char* home  = std::getenv("HOME");
     std::string base  = cache && *cache ? cache : std::string(home ? home : "/tmp") + "/.cache";
@@ -214,7 +214,7 @@ static void loadSettings(bool force = false) {
     }
     std::string error;
     if (const auto values = parseConf(text.substr(0, MAX_CONF_BYTES), error)) {
-        g_settings = settingsFrom(*values);
+        g_settings        = settingsFrom(*values);
         minimize::g_genie = g_settings.genie;
         configureSnap(*values);
         configureTitleBars(*values);
@@ -231,12 +231,12 @@ struct SGL {
     GLuint capTex = 0, capFb = 0, aTex = 0, aFb = 0, bTex = 0, bFb = 0;
     int    capW = 0, capH = 0, halfW = 0, halfH = 0;
     // Half-float targets for HDR range.
-    bool   capFloat = false;
+    bool capFloat = false;
 };
-static SGL g_gl;
+static SGL    g_gl;
 
 static GLuint compile(GLenum kind, const std::string& src) {
-    GLuint s = glCreateShader(kind);
+    GLuint      s = glCreateShader(kind);
     const char* c = src.c_str();
     glShaderSource(s, 1, &c, nullptr);
     glCompileShader(s);
@@ -325,9 +325,9 @@ static void freeGL() {
 
 // Everything we touch, restored exactly so Hyprland's cached GL state stays true.
 struct SGLState {
-    GLint prog, drawFb, readFb, vao, arrayBuf, activeTex, tex0, viewport[4], scissorBox[4], blendSrcRGB, blendDstRGB, blendSrcA, blendDstA;
+    GLint     prog, drawFb, readFb, vao, arrayBuf, activeTex, tex0, viewport[4], scissorBox[4], blendSrcRGB, blendDstRGB, blendSrcA, blendDstA;
     GLboolean scissor, blend;
-    void save() {
+    void      save() {
         glGetIntegerv(GL_CURRENT_PROGRAM, &prog);
         glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFb);
         glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFb);
@@ -368,22 +368,22 @@ struct SGLState {
 /// How far a lifted piece's shadow reaches, px.
 static constexpr float LIFTED_SHADOW = 30.f;
 
-static float reach(float blur = g_settings.blur) {
+static float           reach(float blur = g_settings.blur) {
     return 96.f + blur * 3.f + 4.f;
 }
 
 struct SGlass {
-    CBox  box; // glass rect, monitor-local logical px
-    float radius = 0;
-    float shadow = 0; // shadow reach outside the rect, px
-    uint8_t kind = 0;  // eKind
-    int     tint = -1; // 0xrrggbb: glass tinted with it (water mixed with colour)
-    float   sx = 0, sy = 0; // liquid: how it's pulled out behind as it moves
-    bool    lifted = false; // a deeper shadow (search: over busy windows)
-    float   opacity = 1.f;  // its surface's fade (opening, closing)
+    CBox                 box; // glass rect, monitor-local logical px
+    float                radius = 0;
+    float                shadow = 0;      // shadow reach outside the rect, px
+    uint8_t              kind   = 0;      // eKind
+    int                  tint   = -1;     // 0xrrggbb: glass tinted with it (water mixed with colour)
+    float                sx = 0, sy = 0;  // liquid: how it's pulled out behind as it moves
+    bool                 lifted  = false; // a deeper shadow (search: over busy windows)
+    float                opacity = 1.f;   // its surface's fade (opening, closing)
     SP<Render::ITexture> mask;
-    CBox         maskBox;
-    bool         onDesktop = false;
+    CBox                 maskBox;
+    bool                 onDesktop = false;
 };
 
 /// What a piece of glass looks like: clear (Dock), platter (the switcher),
@@ -401,8 +401,8 @@ enum eKind : uint8_t {
 
 struct SOptics {
     float blur, tint, lift, r, g, b, saturation, rim, grain = 0.f;
-    float dye  = 0.f;
-    bool  lens = true; // refraction, rim light and edge shading
+    float dye     = 0.f;
+    bool  lens    = true; // refraction, rim light and edge shading
     float refract = 1.f;
 };
 
@@ -432,7 +432,7 @@ static SOptics opticsFor(uint8_t kind) {
 struct SShape {
     double x, y, w, h;
     float  radius;
-    int    tint = -1; // optional 6th field, rrggbb
+    int    tint = -1;      // optional 6th field, rrggbb
     float  sx = 0, sy = 0; // optional 7th and 8th: a drop's stretch
 };
 static std::map<std::string, std::vector<SShape>> g_shapes;
@@ -454,7 +454,7 @@ static bool keyMatches(const std::string& key, const PHLLS& ls) {
 
 static std::string onFreezeCommand(std::istream& in);
 
-static void applyShapes(const std::string& ns, uint8_t kind, bool lifted, std::vector<SShape> shapes) {
+static void        applyShapes(const std::string& ns, uint8_t kind, bool lifted, std::vector<SShape> shapes) {
     const bool changed = [&] {
         static const std::vector<SShape> none;
         const auto                       it  = g_shapes.find(ns);
@@ -538,9 +538,8 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     }
     // Optional kind before the list: "platter", "veil" or "bar".
     uint8_t kind = KIND_CLEAR;
-    for (const auto& [word, k] : {std::pair{std::string("platter"), KIND_PLATTER}, std::pair{std::string("veil"), KIND_VEIL},
-                                  std::pair{std::string("bar"), KIND_BAR}, std::pair{std::string("liquid"), KIND_LIQUID},
-                                  std::pair{std::string("backdrop"), KIND_BACKDROP}}) {
+    for (const auto& [word, k] : {std::pair{std::string("platter"), KIND_PLATTER}, std::pair{std::string("veil"), KIND_VEIL}, std::pair{std::string("bar"), KIND_BAR},
+                                  std::pair{std::string("liquid"), KIND_LIQUID}, std::pair{std::string("backdrop"), KIND_BACKDROP}}) {
         const auto at = list.find(word);
         if (at != std::string::npos && at < list.find_first_of("0123456789-")) {
             kind = k;
@@ -553,9 +552,9 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     std::vector<SShape> shapes;
     std::istringstream  items(list);
     for (std::string item; std::getline(items, item, ';');) {
-        SShape   sh{};
-        unsigned rgb = 0;
-        const int n  = std::sscanf(item.c_str(), " %lf,%lf,%lf,%lf,%f,%6x,%f,%f", &sh.x, &sh.y, &sh.w, &sh.h, &sh.radius, &rgb, &sh.sx, &sh.sy);
+        SShape    sh{};
+        unsigned  rgb = 0;
+        const int n   = std::sscanf(item.c_str(), " %lf,%lf,%lf,%lf,%f,%6x,%f,%f", &sh.x, &sh.y, &sh.w, &sh.h, &sh.radius, &rgb, &sh.sx, &sh.sy);
         if (n >= 6)
             sh.tint = (int)rgb;
         if (n >= 5 && sh.w > 1 && sh.h > 1)
@@ -598,13 +597,13 @@ static std::vector<SGlass> glassesFor(const PHLMONITOR& mon) {
             continue;
         if (it != g_shapes.end()) {
             for (const auto& sh : it->second) {
-                CBox b{ls->m_geometry.x - mon->m_position.x + sh.x, ls->m_geometry.y - mon->m_position.y + sh.y, sh.w, sh.h};
-                const auto k = g_kind.find(it->first);
+                CBox          b{ls->m_geometry.x - mon->m_position.x + sh.x, ls->m_geometry.y - mon->m_position.y + sh.y, sh.w, sh.h};
+                const auto    k    = g_kind.find(it->first);
                 const uint8_t kind = k == g_kind.end() ? (uint8_t)KIND_CLEAR : k->second;
                 // A drop's tail reaches past its box: room for it; a lifted
                 // piece's shadow reaches further.
-                const bool lifted = g_lifted.contains(it->first);
-                const float   shadow = kind == KIND_BACKDROP ? 0.f : kind == KIND_LIQUID ? 26.f : lifted ? LIFTED_SHADOW : 10.f;
+                const bool  lifted = g_lifted.contains(it->first);
+                const float shadow = kind == KIND_BACKDROP ? 0.f : kind == KIND_LIQUID ? 26.f : lifted ? LIFTED_SHADOW : 10.f;
                 out.push_back({b, sh.radius, shadow, kind, sh.tint, sh.sx, sh.sy, lifted, alpha});
                 out.back().onDesktop = ls->m_layer <= ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM;
             }
@@ -696,7 +695,7 @@ void CGlassElement::render(const PHLMONITOR& mon) {
         o.lift = 0.f;
         o.dye  = 0.28f;
         // No bright ring round the drop: it's water, not a lens.
-        o.rim  = 0.f;
+        o.rim = 0.f;
     } else if (m_glass.tint >= 0) {
         // Tinted: dyed with the colour, like water mixed with colour
         // (varuna_glass::tinted, TINTED_DYE).
@@ -707,11 +706,11 @@ void CGlassElement::render(const PHLMONITOR& mon) {
         o.lift = 0.f;
         o.dye  = 0.85f;
     }
-    CBox        src = m_glass.box.copy().expand(reach(o.blur));
-    src.x = std::max(0.0, src.x);
-    src.y = std::max(0.0, src.y);
-    src.w = std::min(mon->m_size.x - src.x, src.w);
-    src.h = std::min(mon->m_size.y - src.y, src.h);
+    CBox src     = m_glass.box.copy().expand(reach(o.blur));
+    src.x        = std::max(0.0, src.x);
+    src.y        = std::max(0.0, src.y);
+    src.w        = std::min(mon->m_size.x - src.x, src.w);
+    src.h        = std::min(mon->m_size.y - src.y, src.h);
     const int px = (int)std::floor(src.x * scale), py = (int)std::floor(src.y * scale);
     const int pw = std::max(1, (int)std::ceil(src.w * scale)), ph = std::max(1, (int)std::ceil(src.h * scale));
 
@@ -720,7 +719,7 @@ void CGlassElement::render(const PHLMONITOR& mon) {
     const float refWhite = hdr ? std::max(mon->m_sdrMaxLuminance * mon->m_sdrBrightness, 1.f) / 80.f : 1.f;
     const bool  fp       = refWhite != 1.f;
 
-    SGLState st;
+    SGLState    st;
     st.save();
 
     // 1. capture: framebuffer -> capTex (full res)
@@ -842,7 +841,7 @@ void CGlassElement::render(const PHLMONITOR& mon) {
 
 // ------------------------------------------------------------------- genie --
 
-static const char* GENIE_VERT = R"GLSL(in vec2 a_pos;
+static const char*   GENIE_VERT = R"GLSL(in vec2 a_pos;
 in vec2 a_uv;
 out vec2 v_uv;
 void main() {
@@ -850,7 +849,7 @@ void main() {
     gl_Position = vec4(a_pos, 0.0, 1.0);
 })GLSL";
 
-static const char* GENIE_FRAG = R"GLSL(in vec2 v_uv;
+static const char*   GENIE_FRAG = R"GLSL(in vec2 v_uv;
 uniform sampler2D u_tex;
 uniform float u_alpha;
 out vec4 frag;
@@ -866,7 +865,7 @@ struct SGenieGL {
 };
 static SGenieGL g_genieGL;
 
-static bool initGenieGL() {
+static bool     initGenieGL() {
     if (g_genieGL.ready || g_genieGL.failed)
         return g_genieGL.ready;
     const std::string header = "#version 300 es\nprecision highp float;\n";
@@ -1031,9 +1030,9 @@ struct SFrozen {
 
 static std::map<std::string, SFrozen> g_frozen;
 
-static constexpr int LOUPE_CELLS = 15, LOUPE_ZOOM = 9, LOUPE_RING = 3;
+static constexpr int                  LOUPE_CELLS = 15, LOUPE_ZOOM = 9, LOUPE_RING = 3;
 
-static float monitorRefWhite(const PHLMONITOR& mon) {
+static float                          monitorRefWhite(const PHLMONITOR& mon) {
     const bool hdr = mon->m_cmType == NCMType::CM_HDR || mon->m_cmType == NCMType::CM_HDR_EDID;
     return hdr ? std::max(mon->m_sdrMaxLuminance * mon->m_sdrBrightness, 1.f) / 80.f : 1.f;
 }
@@ -1204,7 +1203,7 @@ static std::map<std::string, SFrozen> g_stills;
 static bool                           g_stillWanted   = false;
 static bool                           g_stillNoCursor = false;
 
-static void stillPass(const PHLMONITOR& mon, bool capture) {
+static void                           stillPass(const PHLMONITOR& mon, bool capture) {
     auto fb = dynamicPointerCast<Render::GL::CGLFramebuffer>(g_pHyprRenderer->m_renderData.currentFB);
     if (!fb || mon->m_transform != WL_OUTPUT_TRANSFORM_NORMAL)
         return;
@@ -1307,10 +1306,10 @@ static bool writeStillPng(const PHLMONITOR& mon, const CBox& global, const std::
         std::ranges::transform(bytes, rgba.begin(), [](GLubyte b) { return b / 255.f; });
     }
     glBindFramebuffer(GL_READ_FRAMEBUFFER, readFb);
-    auto* surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, w, h);
-    auto* data    = cairo_image_surface_get_data(surface);
-    const int stride = cairo_image_surface_get_stride(surface);
-    const auto byte  = [&](float v) { return (uint32_t)std::lround(std::clamp(still.fp ? encodeSRGB(v / still.refWhite) : v, 0.f, 1.f) * 255.f); };
+    auto*      surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, w, h);
+    auto*      data    = cairo_image_surface_get_data(surface);
+    const int  stride  = cairo_image_surface_get_stride(surface);
+    const auto byte    = [&](float v) { return (uint32_t)std::lround(std::clamp(still.fp ? encodeSRGB(v / still.refWhite) : v, 0.f, 1.f) * 255.f); };
     for (int row = 0; row < h; row++) {
         auto* out = reinterpret_cast<uint32_t*>(data + (size_t)row * stride);
         for (int col = 0; col < w; col++) {
@@ -1397,15 +1396,15 @@ class CWindowGlass : public IHyprWindowDecoration {
         return {};
     }
 
-    void onPositioningReply(const SDecorationPositioningReply&) override {}
+    void            onPositioningReply(const SDecorationPositioningReply&) override {}
 
     eDecorationType getDecorationType() override {
         return DECORATION_CUSTOM;
     }
 
-    void updateWindow(PHLWINDOW) override {}
+    void             updateWindow(PHLWINDOW) override {}
 
-    void damageEntire() override {}
+    void             damageEntire() override {}
 
     eDecorationLayer getDecorationLayer() override {
         return DECORATION_LAYER_BOTTOM;
@@ -1465,7 +1464,7 @@ static void onRenderPre(PHLMONITOR mon) {
     CRegion damage = mon->m_damage.getBufferDamage(1);
     if (damage.empty())
         return;
-    const auto       glasses = glassesFor(mon);
+    const auto        glasses = glassesFor(mon);
     std::vector<CBox> seen;
     std::vector<bool> done(glasses.size(), false);
     for (const auto& g : glasses)
@@ -1536,7 +1535,7 @@ static void start() {
     keepclear::init();
     // Before snapping: it sees the pointer held at a monitor's edge.
     edge::init();
-    edge::g_held = [] { snap::onMove(); };
+    edge::g_held              = [] { snap::onMove(); };
     requests::g_onGreenButton = snap::onGreenButtonAt;
     requests::g_limited       = snap::limited;
     snap::init();
@@ -1544,10 +1543,10 @@ static void start() {
     edges::init();
     zoom::init();
     wallpaper::init();
-    minimize::g_drawGenie = drawGenie;
-    picker::g_draw        = drawPicker;
-    picker::g_colourAt    = pickedColour;
-    picker::g_forget      = forgetFrozen;
+    minimize::g_drawGenie   = drawGenie;
+    picker::g_draw          = drawPicker;
+    picker::g_colourAt      = pickedColour;
+    picker::g_forget        = forgetFrozen;
     mission::g_drawBackdrop = [](const PHLMONITOR& mon, float opacity) {
         SGlass backdrop{CBox{{}, mon->m_size}, 0.f, 0.f, KIND_BACKDROP};
         backdrop.opacity = opacity;
@@ -1605,10 +1604,10 @@ static void stop() {
 
 static const SHyprCtlCommand COMMAND = {.name = "varunaglass", .exact = false, .fn = onShapesCommand};
 
-static const bool g_announced = setenv("VARUNA_COMPOSITOR", std::to_string(getpid()).c_str(), 1) == 0;
-static const bool g_named     = prctl(PR_SET_NAME, "Varuna") == 0;
+static const bool            g_announced = setenv("VARUNA_COMPOSITOR", std::to_string(getpid()).c_str(), 1) == 0;
+static const bool            g_named     = prctl(PR_SET_NAME, "Varuna") == 0;
 
-void Varuna::init() {
+void                         Varuna::init() {
     start();
     g_pHyprCtl->registerCommand(COMMAND);
     refreshAll();

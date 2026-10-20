@@ -17,12 +17,12 @@ namespace picker {
 
     static constexpr const char* CANCELLED = "cancel";
 
-    static bool g_active         = false;
-    static bool g_swallowRelease = false;
+    static bool                  g_active         = false;
+    static bool                  g_swallowRelease = false;
 
-    static void (*g_draw)(const PHLMONITOR& mon)                               = nullptr;
+    static void (*g_draw)(const PHLMONITOR& mon)                                        = nullptr;
     static std::optional<std::string> (*g_colourAt)(const PHLMONITOR&, const Vector2D&) = nullptr;
-    static void (*g_forget)()                                                  = nullptr;
+    static void (*g_forget)()                                                           = nullptr;
 
     static void damageAll() {
         for (const auto& m : State::monitorState()->monitors())

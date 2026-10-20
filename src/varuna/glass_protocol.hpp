@@ -27,7 +27,7 @@ namespace glass_protocol {
     };
 
     using Apply = std::function<void(const std::string& key, uint8_t kind, bool lifted, std::vector<SPiece> pieces)>;
-    static Apply g_apply;
+    static Apply               g_apply;
 
     static std::vector<SPiece> piecesFrom(wl_array* array) {
         std::vector<SPiece> pieces;
@@ -94,15 +94,15 @@ namespace glass_protocol {
             std::vector<SPiece> pieces;
         };
 
-        UP<CVarunaGlassV1>       m_resource;
-        WP<CWLSurfaceResource>   m_surface;
-        SState                   m_pending;
-        bool                     m_dirty = false;
-        std::string              m_key;
-        CHyprSignalListener      m_committed;
-        CHyprSignalListener      m_gone;
+        UP<CVarunaGlassV1>     m_resource;
+        WP<CWLSurfaceResource> m_surface;
+        SState                 m_pending;
+        bool                   m_dirty = false;
+        std::string            m_key;
+        CHyprSignalListener    m_committed;
+        CHyprSignalListener    m_gone;
 
-        void apply() {
+        void                   apply() {
             const auto surface = m_surface.lock();
             if (!surface || !g_apply)
                 return;
@@ -146,7 +146,7 @@ namespace glass_protocol {
         std::vector<UP<CVarunaGlassManagerV1>> m_managers;
         std::vector<UP<CGlass>>                m_glasses;
 
-        void forgetManager(CVarunaGlassManagerV1* manager) {
+        void                                   forgetManager(CVarunaGlassManagerV1* manager) {
             std::erase_if(m_managers, [manager](const auto& m) { return m.get() == manager; });
         }
 
@@ -160,16 +160,14 @@ namespace glass_protocol {
                 manager->noMemory();
                 return;
             }
-            glass->m_onGone = [this](CGlass* gone) {
-                g_pEventLoopManager->doLater([this, gone] { std::erase_if(m_glasses, [gone](const auto& g) { return g.get() == gone; }); });
-            };
+            glass->m_onGone = [this](CGlass* gone) { g_pEventLoopManager->doLater([this, gone] { std::erase_if(m_glasses, [gone](const auto& g) { return g.get() == gone; }); }); };
             m_glasses.emplace_back(std::move(glass));
         }
     };
 
     static UP<CProtocol> g_protocol;
 
-    static void init(Apply apply) {
+    static void          init(Apply apply) {
         g_apply    = std::move(apply);
         g_protocol = makeUnique<CProtocol>(&varuna_glass_manager_v1_interface, 1, "VarunaGlass");
     }

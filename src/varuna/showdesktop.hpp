@@ -34,7 +34,7 @@ namespace showdesktop {
     static bool                g_out = false;
     static Clock::time_point   g_since;
 
-    static bool overlaps(const CBox& a, const CBox& b) {
+    static bool                overlaps(const CBox& a, const CBox& b) {
         return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     }
 

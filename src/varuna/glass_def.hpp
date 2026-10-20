@@ -1,6 +1,10 @@
 // Generated from glass.def. Do not edit.
 #pragma once
-struct SGlassField { const char* key; bool flag; float min, max, def; };
+struct SGlassField {
+    const char* key;
+    bool        flag;
+    float       min, max, def;
+};
 static const SGlassField GLASS_FIELDS[] = {
     {"version", false, (float)1, (float)1, (float)1},
     {"enabled", true, (float)0, (float)1, (float)1},

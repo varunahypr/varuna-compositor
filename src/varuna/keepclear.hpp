@@ -26,51 +26,51 @@
 
 namespace keepclear {
 
-// Heights we asked windows to shrink from. An app with a minimum size may
-// keep its height anyway; then don't ask again.
-static std::unordered_map<const Desktop::View::CWindow*, double> g_refused;
-static std::unordered_map<MONITORID, CBox>                       g_areas;
+    // Heights we asked windows to shrink from. An app with a minimum size may
+    // keep its height anyway; then don't ask again.
+    static std::unordered_map<const Desktop::View::CWindow*, double> g_refused;
+    static std::unordered_map<MONITORID, CBox>                       g_areas;
 
-static bool keepClear(const PHLWINDOW& w, CBox& box) {
-    if (!w || w->isX11OverrideRedirect())
-        return false;
-    const auto mon = w->m_monitor.lock();
-    if (!mon)
-        return false;
-    const CBox   area   = mon->logicalBoxMinusReserved();
-    const auto   deco   = w->getFullWindowReservedArea();
-    const double top    = area.y + deco.topLeft.y;
-    const double bottom = mon->logicalBox().y + mon->logicalBox().h - deco.bottomRight.y;
-    const double room   = bottom - top;
-    const CBox   was    = box;
-    if (box.h > room + 0.5) {
-        const auto it = g_refused.find(w.get());
-        if (it == g_refused.end() || std::abs(it->second - box.h) > 0.5) {
-            g_refused[w.get()] = box.h;
-            box.h              = room;
+    static bool                                                      keepClear(const PHLWINDOW& w, CBox& box) {
+        if (!w || w->isX11OverrideRedirect())
+            return false;
+        const auto mon = w->m_monitor.lock();
+        if (!mon)
+            return false;
+        const CBox   area   = mon->logicalBoxMinusReserved();
+        const auto   deco   = w->getFullWindowReservedArea();
+        const double top    = area.y + deco.topLeft.y;
+        const double bottom = mon->logicalBox().y + mon->logicalBox().h - deco.bottomRight.y;
+        const double room   = bottom - top;
+        const CBox   was    = box;
+        if (box.h > room + 0.5) {
+            const auto it = g_refused.find(w.get());
+            if (it == g_refused.end() || std::abs(it->second - box.h) > 0.5) {
+                g_refused[w.get()] = box.h;
+                box.h              = room;
+            }
+        }
+        box.y = std::max(box.y, top);
+        return box != was;
+    }
+
+    static void onRenderPre(const PHLMONITOR& mon) {
+        const CBox area = mon->logicalBoxMinusReserved();
+        const auto it   = g_areas.find(mon->m_id);
+        if (it != g_areas.end() && it->second == area)
+            return;
+        g_areas[mon->m_id] = area;
+        for (const auto& w : Desktop::windowState()->windows()) {
+            if (!w || !w->m_isMapped || !w->m_isFloating || w->m_monitor.lock() != mon || Fullscreen::controller()->isFullscreen(w))
+                continue;
+            if (const auto target = w->layoutTarget())
+                target->setPositionGlobal(target->position());
         }
     }
-    box.y = std::max(box.y, top);
-    return box != was;
-}
 
-static void onRenderPre(const PHLMONITOR& mon) {
-    const CBox area = mon->logicalBoxMinusReserved();
-    const auto it   = g_areas.find(mon->m_id);
-    if (it != g_areas.end() && it->second == area)
-        return;
-    g_areas[mon->m_id] = area;
-    for (const auto& w : Desktop::windowState()->windows()) {
-        if (!w || !w->m_isMapped || !w->m_isFloating || w->m_monitor.lock() != mon || Fullscreen::controller()->isFullscreen(w))
-            continue;
-        if (const auto target = w->layoutTarget())
-            target->setPositionGlobal(target->position());
+    static void init() {
+        static auto destroy = Event::bus()->m_events.window.destroy.listen([](PHLWINDOWREF w) { g_refused.erase(w.get()); });
+        static auto gone    = Event::bus()->m_events.monitor.destroyMon.listen([](PHLMONITOR m) { g_areas.erase(m->m_id); });
     }
-}
-
-static void init() {
-    static auto destroy = Event::bus()->m_events.window.destroy.listen([](PHLWINDOWREF w) { g_refused.erase(w.get()); });
-    static auto gone    = Event::bus()->m_events.monitor.destroyMon.listen([](PHLMONITOR m) { g_areas.erase(m->m_id); });
-}
 
 } // namespace keepclear

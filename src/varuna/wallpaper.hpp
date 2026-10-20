@@ -41,7 +41,7 @@ namespace wallpaper {
     static std::map<std::string, SPaper>      g_papers;
     static std::map<std::string, SLoad>       g_loading;
 
-    static std::string listPath() {
+    static std::string                        listPath() {
         const char* data = std::getenv("XDG_DATA_HOME");
         const char* home = std::getenv("HOME");
         std::string base = data && *data ? data : std::string(home ? home : "/tmp") + "/.local/share";
