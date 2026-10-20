@@ -432,7 +432,7 @@ static SOptics opticsFor(uint8_t kind) {
     if (kind == KIND_BACKDROP)
         return {48.f, 0.35f, 0.f, 0.04f, 0.04f, 0.06f, 1.2f, 0.f, 0.f, 0.f, false};
     if (kind == KIND_FROSTED)
-        return {std::max(s.platterBlur, 10.f), std::min(s.tint + 0.45f, 0.85f), 0.f, s.tintR, s.tintG, s.tintB, s.saturation, s.rim};
+        return {std::max(s.platterBlur, 2.f), 0.2f + 0.7f * s.platterTint, 0.f, s.tintR, s.tintG, s.tintB, s.saturation, s.rim};
     if (kind == KIND_PANE)
         return {s.blur + 0.25f * s.platterBlur, s.veilWhite, 0.f, 1.f, 1.f, 1.f, s.saturation, s.rim * 1.2f, 0.f, 0.f, true, 1.6f};
     return {s.blur, s.tint, s.lift, s.tintR, s.tintG, s.tintB, s.saturation, s.rim};
