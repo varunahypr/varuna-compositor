@@ -1375,6 +1375,9 @@ void IHyprRenderer::renderBackground(PHLMONITOR pMonitor) {
     static auto PBACKGROUNDCOLOR = CConfigValue<Config::INTEGER>("misc:background_color");
     static auto PNOSPLASH        = CConfigValue<Config::INTEGER>("misc:disable_splash_rendering");
 
+    if (Varuna::drawWallpaper(pMonitor))
+        return;
+
     if (*PRENDERTEX /* inverted cfg flag */ || pMonitor->m_backgroundOpacity->isBeingAnimated())
         m_renderPass.add(makeUnique<CClearPassElement>(CClearPassElement::SClearData{CHyprColor(*PBACKGROUNDCOLOR)}));
 

@@ -58,6 +58,7 @@
 #include "keepclear.hpp"
 #include "requests.hpp"
 #include "minimize.hpp"
+#include "wallpaper.hpp"
 #include "edge.hpp"
 #include "snap.hpp"
 #include "corners.hpp"
@@ -450,10 +451,12 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     in >> cmd >> sub;
     // Minimizing into the Dock (minimize.hpp).
     if (sub == "features")
-        return "minimize fullscreen edges";
+        return "minimize fullscreen edges wallpaper";
     if (sub == "minimize" || sub == "restore" || sub == "snapinfo" || sub == "where")
         return minimize::command(sub, in);
     // Snapping a floating window (snap.hpp).
+    if (sub == "wallpaper")
+        return wallpaper::command(in);
     if (sub == "edge")
         return edges::command(in);
     if (sub == "snap")
@@ -1137,6 +1140,7 @@ static void start() {
     corners::init();
     edges::init();
     zoom::init();
+    wallpaper::init();
     minimize::g_drawGenie = drawGenie;
     static auto glassOnOpen = Event::bus()->m_events.window.open.listen([](PHLWINDOW w) { addWindowGlass(w); });
     for (const auto& w : Desktop::windowState()->windows())
@@ -1158,6 +1162,7 @@ static void start() {
 }
 
 static void stop() {
+    wallpaper::stop();
     edges::stop();
     zoom::stop();
     titlebar::stop();
@@ -1183,6 +1188,10 @@ void Varuna::init() {
 
 void Varuna::stop() {
     ::stop();
+}
+
+bool Varuna::drawWallpaper(const PHLMONITOR& monitor) {
+    return wallpaper::draw(monitor);
 }
 
 bool Varuna::onFullscreenRequest(const PHLWINDOW& window, bool on) {
