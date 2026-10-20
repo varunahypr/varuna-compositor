@@ -93,6 +93,9 @@ void Internal::registerBindingsImpl(lua_State* L, CConfigManager* mgr) {
     Internal::registerDispatcherBindings(L);
     Internal::registerNotificationBindings(L);
 
+    lua_pushboolean(L, true);
+    lua_setfield(L, -2, "varuna");
+
     lua_setglobal(L, "hl");
 
     lua_pushcfunction(L, hlPrint);

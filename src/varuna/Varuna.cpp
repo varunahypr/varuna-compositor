@@ -33,6 +33,7 @@
 #include <string>
 #include <vector>
 #include <sys/prctl.h>
+#include <unistd.h>
 #include <sys/stat.h>
 
 // The drag icon fix (dnd.hpp) needs CWLDataDeviceProtocol::m_dnd, which is
@@ -452,7 +453,7 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     in >> cmd >> sub;
     // Minimizing into the Dock (minimize.hpp).
     if (sub == "features")
-        return "minimize";
+        return "minimize fullscreen";
     if (sub == "minimize" || sub == "restore" || sub == "snapinfo" || sub == "where")
         return minimize::command(sub, in);
     // Snapping a floating window (snap.hpp).
@@ -902,7 +903,7 @@ static void stop() {
 
 static const SHyprCtlCommand COMMAND = {.name = "varunaglass", .exact = false, .fn = onShapesCommand};
 
-static const bool g_announced = setenv("VARUNA_COMPOSITOR", "1", 1) == 0;
+static const bool g_announced = setenv("VARUNA_COMPOSITOR", std::to_string(getpid()).c_str(), 1) == 0;
 static const bool g_named     = prctl(PR_SET_NAME, "Varuna") == 0;
 
 void Varuna::init() {
@@ -913,4 +914,12 @@ void Varuna::init() {
 
 void Varuna::stop() {
     ::stop();
+}
+
+bool Varuna::onFullscreenRequest(const PHLWINDOW& window, bool on) {
+    return requests::onFullscreenRequest(window, on);
+}
+
+bool Varuna::onMaximizeRequest(const PHLWINDOW& window, bool on) {
+    return requests::onMaximizeRequest(window, on);
 }

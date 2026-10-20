@@ -26,6 +26,7 @@
 #include "../state/WindowFadeout.hpp"
 #include "../state/WindowState.hpp"
 #include "../history/WindowHistoryTracker.hpp"
+#include "../../varuna/Varuna.hpp"
 #include "../../Compositor.hpp"
 #include "../../render/decorations/CHyprDropShadowDecoration.hpp"
 #include "../../render/decorations/CHyprInnerGlowDecoration.hpp"
@@ -1413,7 +1414,7 @@ void CWindow::onUpdateState() {
         }
 
         bool fs = requestsFS.value();
-        if (m_isMapped) {
+        if (m_isMapped && !Varuna::onFullscreenRequest(m_self.lock(), fs)) {
             if (requestsFS.value())
                 Fullscreen::controller()->setFullscreenMode(m_self.lock(), std::nullopt, Fullscreen::FSMODE_FULLSCREEN);
             else {
@@ -1435,6 +1436,9 @@ void CWindow::onUpdateState() {
                 window->m_suppressNextMaximize = false;
                 return;
             }
+
+            if (Varuna::onMaximizeRequest(window, requestsMX.value()))
+                return;
 
             const auto CLIENT_STATE = Fullscreen::controller()->getFullscreenModes(window).client;
             // If window's maximised, unmaximise it. If it's not maximised, maximise it.

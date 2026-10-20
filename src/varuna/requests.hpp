@@ -1,8 +1,9 @@
 // Title-bar buttons, like macOS.
 //
 // Hyprland ignores an app's own minimize request (xdg_toplevel.set_minimized;
-// it only reports task bars' requests), and varuna's rules suppress maximize
-// requests. Pass both on as IPC events so the shell can act on them:
+// it only reports task bars' requests), and apps' maximize and full screen
+// requests come here instead of Hyprland's handling (CWindow::onUpdateState).
+// They're passed on as IPC events so the shell can act on them:
 //
 //   minimized>>ADDR,1     the same event Hyprland sends for a task bar's
 //                         request; the shell minimizes into the dock
@@ -15,12 +16,13 @@
 //                         green button of a window with a size limit: it
 //                         zooms to its limit (snap.hpp's fitted)
 //   varunafullscreen>>ADDR,0|1
-//                         an app asking for full screen (F11); varuna's rules
-//                         suppress it so the shell's full screen is used
-//                         (laid out maximized, so the bar can push it down)
+//                         an app asking for full screen (F11): it gets
+//                         varuna's at once (laid out maximized, so the bar
+//                         can push it down); the shell gives it its own
+//                         desktop
 //
-// X11 apps' maximize requests (suppressed by the rules too) become
-// varunazoom / varunafill the same way.
+// X11 apps' maximize requests become varunazoom / varunafill the same way;
+// their full screen stays Hyprland's.
 //
 // Hyprland also tells apps it can only maximize and go full screen, so GTK
 // greys out the minimize button; now that minimize works, each window is
@@ -36,8 +38,9 @@
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/managers/EventManager.hpp>
+#include <hyprland/src/config/shared/actions/ConfigActions.hpp>
+#include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
 #include <hyprland/src/protocols/XDGShell.hpp>
-#include <hyprland/src/xwayland/XSurface.hpp>
 
 namespace requests {
 
@@ -54,6 +57,8 @@ struct SPress {
     bool                                  green = false; // on a green button
 };
 static SPress g_presses[2];
+static constexpr auto                                                        MAXIMIZE_ECHO_TIME = std::chrono::milliseconds(500);
+static std::map<const Desktop::View::CWindow*, std::chrono::steady_clock::time_point> g_leftFullscreen;
 /// How quick and close two clicks are to be a double-click (GTK's own
 /// double-click time is 400 ms), and how soon after it the request comes.
 static constexpr auto   DOUBLE_TIME = std::chrono::milliseconds(500), REQUEST_TIME = std::chrono::milliseconds(800);
@@ -107,23 +112,33 @@ static void announceMinimize(const SP<CXDGToplevelResource>& toplevel) {
         surface->scheduleConfigure();
 }
 
+static bool onFullscreenRequest(const PHLWINDOW& w, bool on) {
+    if (w->m_isX11)
+        return false;
+    post("varunafullscreen", w, on);
+    const Fullscreen::SFullscreenMode want = on ? Fullscreen::SFullscreenMode{.internal = Fullscreen::FSMODE_MAXIMIZED, .client = Fullscreen::FSMODE_FULLSCREEN} :
+                                                  Fullscreen::SFullscreenMode{};
+    const auto now = Fullscreen::controller()->getFullscreenModes(w);
+    if (now.internal != want.internal || now.client != want.client)
+        Config::Actions::fullscreenWindow(want.internal, want.client, true, w);
+    return true;
+}
+
+static bool echoOfLeavingFullscreen(const PHLWINDOW& w) {
+    const auto left = g_leftFullscreen.find(w.get());
+    return left != g_leftFullscreen.end() && std::chrono::steady_clock::now() - left->second < MAXIMIZE_ECHO_TIME;
+}
+
+static bool onMaximizeRequest(const PHLWINDOW& w, bool on) {
+    if (!(on && echoOfLeavingFullscreen(w)))
+        post(maximizeEvent(w), w, on);
+    return true;
+}
+
 static void watch(const PHLWINDOW& w) {
     if (!w || g_watches.contains(w.get()))
         return;
     PHLWINDOWREF ref = w;
-    // X11 apps (their own title bars, mostly): the maximize button, or a
-    // double-click on the title bar. Their full screen stays Hyprland's.
-    if (const auto x = w->m_xwaylandSurface.lock()) {
-        WP<CXWaylandSurface> xs       = x;
-        auto                 listener = x->m_events.stateChanged.listen([ref, xs] {
-            const auto s   = xs.lock();
-            const auto win = ref.lock();
-            if (s && win && s->m_state.requestsMaximize.has_value())
-                post(maximizeEvent(win), win, *s->m_state.requestsMaximize);
-        });
-        g_watches[w.get()] = SWatch{ref, std::move(listener)};
-        return;
-    }
     const auto surface = w->m_xdgSurface.lock();
     const auto toplevel = surface ? surface->m_toplevel.lock() : nullptr;
     if (!toplevel)
@@ -138,10 +153,6 @@ static void watch(const PHLWINDOW& w) {
             return;
         if (t->m_state.requestsMinimize.value_or(false))
             post("minimized", win, true);
-        if (t->m_state.requestsMaximize.has_value())
-            post(maximizeEvent(win), win, *t->m_state.requestsMaximize);
-        if (t->m_state.requestsFullscreen.has_value())
-            post("varunafullscreen", win, *t->m_state.requestsFullscreen);
     });
     g_watches[w.get()] = SWatch{ref, std::move(listener)};
 }
@@ -149,6 +160,7 @@ static void watch(const PHLWINDOW& w) {
 // Forget windows that are gone.
 static void prune() {
     std::erase_if(g_watches, [](const auto& kv) { return kv.second.window.expired(); });
+    std::erase_if(g_leftFullscreen, [](const auto& kv) { return !g_watches.contains(kv.first); });
 }
 
 static void init() {
@@ -161,6 +173,10 @@ static void init() {
             onPress();
     });
     static auto onDestroy = Event::bus()->m_events.window.destroy.listen([](PHLWINDOWREF) { prune(); });
+    static auto onFull    = Event::bus()->m_events.window.fullscreen.listen([](PHLWINDOW w) {
+        if (w && !Fullscreen::controller()->isFullscreen(w))
+            g_leftFullscreen[w.get()] = std::chrono::steady_clock::now();
+    });
     // Windows that were already open when the plugin loaded.
     for (const auto& w : Desktop::windowState()->windows())
         watch(w);
