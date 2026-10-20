@@ -58,6 +58,7 @@
 #include "keepclear.hpp"
 #include "requests.hpp"
 #include "minimize.hpp"
+#include "places.hpp"
 #include "glass_protocol.hpp"
 #include "mission.hpp"
 #include "picker.hpp"
@@ -498,7 +499,7 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     in >> cmd >> sub;
     // Minimizing into the Dock (minimize.hpp).
     if (sub == "features")
-        return "minimize fullscreen edges wallpaper pick desktopglass mission glassprotocol";
+        return "minimize fullscreen edges wallpaper pick desktopglass mission glassprotocol places";
     if (sub == "minimize" || sub == "restore" || sub == "snapinfo" || sub == "where")
         return minimize::command(sub, in);
     // Snapping a floating window (snap.hpp).
@@ -508,6 +509,8 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
         return picker::command(in);
     if (sub == "mission")
         return mission::command(in);
+    if (sub == "places")
+        return places::command(in);
     if (sub == "edge")
         return edges::command(in);
     if (sub == "snap")
@@ -1352,6 +1355,7 @@ static void start() {
         g_pHyprRenderer->m_renderPass.add(makeUnique<CGlassElement>(mon, backdrop));
     };
     picker::init();
+    places::init();
     glass_protocol::init([](const std::string& key, uint8_t kind, bool lifted, std::vector<glass_protocol::SPiece> pieces) {
         std::vector<SShape> shapes;
         for (const auto& p : pieces)
