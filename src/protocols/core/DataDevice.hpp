@@ -177,6 +177,7 @@ class CWLDataDeviceProtocol : public IWaylandProtocol {
         bool                    overriddenCursor = false;
         CHyprSignalListener     dndSurfaceDestroy;
         CHyprSignalListener     dndSurfaceCommit;
+        Vector2D                dndSurfaceOffset;
 
         // for ending a dnd
         CHyprSignalListener mouseMove;
