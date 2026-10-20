@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <GLES3/gl32.h>
+#include <cairo/cairo.h>
 
 #include <cerrno>
 #include <chrono>
@@ -451,6 +452,8 @@ static bool keyMatches(const std::string& key, const PHLLS& ls) {
     return ls->m_namespace == key.substr(0, at) && mon && mon->m_name == key.substr(at + 1);
 }
 
+static std::string onFreezeCommand(std::istream& in);
+
 static void applyShapes(const std::string& ns, uint8_t kind, bool lifted, std::vector<SShape> shapes) {
     const bool changed = [&] {
         static const std::vector<SShape> none;
@@ -501,7 +504,7 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     in >> cmd >> sub;
     // Minimizing into the Dock (minimize.hpp).
     if (sub == "features")
-        return "minimize fullscreen edges wallpaper pick desktopglass mission glassprotocol places showdesktop switcher";
+        return "minimize fullscreen edges wallpaper pick desktopglass mission glassprotocol places showdesktop switcher freeze";
     if (sub == "minimize" || sub == "restore" || sub == "snapinfo" || sub == "where")
         return minimize::command(sub, in);
     // Snapping a floating window (snap.hpp).
@@ -517,6 +520,8 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
         return showdesktop::command(in);
     if (sub == "switcher")
         return switcher::command(in);
+    if (sub == "freeze")
+        return onFreezeCommand(in);
     if (sub == "edge")
         return edges::command(in);
     if (sub == "snap")
@@ -1193,6 +1198,186 @@ static void freeFrozen() {
     g_frozen.clear();
 }
 
+// ------------------------------------------------------------ still screen --
+
+static std::map<std::string, SFrozen> g_stills;
+static bool                           g_stillWanted   = false;
+static bool                           g_stillNoCursor = false;
+
+static void stillPass(const PHLMONITOR& mon, bool capture) {
+    auto fb = dynamicPointerCast<Render::GL::CGLFramebuffer>(g_pHyprRenderer->m_renderData.currentFB);
+    if (!fb || mon->m_transform != WL_OUTPUT_TRANSFORM_NORMAL)
+        return;
+    const int w = (int)fb->m_size.x, h = (int)fb->m_size.y;
+    if (w <= 0 || h <= 0)
+        return;
+    auto&    still = g_stills[mon->m_name];
+    SGLState st;
+    st.save();
+    glDisable(GL_SCISSOR_TEST);
+    if (capture) {
+        const float refWhite = monitorRefWhite(mon);
+        const bool  fp       = refWhite != 1.f;
+        if (still.w != w || still.h != h || still.fp != fp) {
+            makeTarget(still.tex, still.fb, w, h, fp);
+            still.w  = w;
+            still.h  = h;
+            still.fp = fp;
+        }
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, fb->getFBID());
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, still.fb);
+        glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        still.taken    = true;
+        still.refWhite = refWhite;
+    } else if (still.taken && still.w == w && still.h == h) {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, still.fb);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fb->getFBID());
+        glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    }
+    st.restore();
+}
+
+class CStillElement : public IPassElement {
+  public:
+    CStillElement(PHLMONITOR mon, bool capture) : m_mon(mon), m_capture(capture) {}
+
+    std::vector<UP<IPassElement>> draw() override {
+        if (auto mon = m_mon.lock())
+            stillPass(mon, m_capture);
+        return {};
+    }
+    bool needsLiveBlur() override {
+        return false;
+    }
+    bool needsPrecomputeBlur() override {
+        return false;
+    }
+    const char* passName() override {
+        return "CVarunaStillElement";
+    }
+    ePassElementType type() override {
+        return EK_CUSTOM;
+    }
+    std::optional<CBox> boundingBox() override {
+        const auto mon = m_mon.lock();
+        if (!mon)
+            return std::nullopt;
+        return CBox{{}, mon->m_size};
+    }
+    bool disableSimplification() override {
+        return true;
+    }
+
+  private:
+    PHLMONITORREF m_mon;
+    bool          m_capture;
+};
+
+static bool stillTaken(const PHLMONITOR& mon) {
+    const auto it = g_stills.find(mon->m_name);
+    return it != g_stills.end() && it->second.taken;
+}
+
+static void damageEveryMonitor() {
+    for (const auto& m : State::monitorState()->monitors())
+        if (m)
+            g_pHyprRenderer->damageMonitor(m);
+}
+
+static bool writeStillPng(const PHLMONITOR& mon, const CBox& global, const std::string& path) {
+    const auto it = g_stills.find(mon->m_name);
+    if (it == g_stills.end() || !it->second.taken)
+        return false;
+    const auto& still = it->second;
+    const CBox  px    = global.copy().translate(-mon->m_position).scale(mon->m_scale).round();
+    const int   x = std::clamp((int)px.x, 0, still.w), y = std::clamp((int)px.y, 0, still.h);
+    const int   w = std::clamp((int)px.w, 0, still.w - x), h = std::clamp((int)px.h, 0, still.h - y);
+    if (w <= 0 || h <= 0)
+        return false;
+    Render::GL::g_pHyprOpenGL->makeEGLCurrent();
+    GLint readFb = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFb);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, still.fb);
+    std::vector<float> rgba((size_t)w * h * 4);
+    if (still.fp)
+        glReadPixels(x, y, w, h, GL_RGBA, GL_FLOAT, rgba.data());
+    else {
+        std::vector<GLubyte> bytes(rgba.size());
+        glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, bytes.data());
+        std::ranges::transform(bytes, rgba.begin(), [](GLubyte b) { return b / 255.f; });
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, readFb);
+    auto* surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, w, h);
+    auto* data    = cairo_image_surface_get_data(surface);
+    const int stride = cairo_image_surface_get_stride(surface);
+    const auto byte  = [&](float v) { return (uint32_t)std::lround(std::clamp(still.fp ? encodeSRGB(v / still.refWhite) : v, 0.f, 1.f) * 255.f); };
+    for (int row = 0; row < h; row++) {
+        auto* out = reinterpret_cast<uint32_t*>(data + (size_t)row * stride);
+        for (int col = 0; col < w; col++) {
+            const float* p = &rgba[((size_t)row * w + col) * 4];
+            out[col]       = (byte(p[0]) << 16) | (byte(p[1]) << 8) | byte(p[2]);
+        }
+    }
+    cairo_surface_mark_dirty(surface);
+    const bool written = cairo_surface_write_to_png(surface, path.c_str()) == CAIRO_STATUS_SUCCESS;
+    cairo_surface_destroy(surface);
+    return written;
+}
+
+static std::string onFreezeCommand(std::istream& in) {
+    std::string what;
+    in >> what;
+    if (what == "on") {
+        std::string pointer;
+        in >> pointer;
+        g_stillWanted = true;
+        for (auto& [name, still] : g_stills)
+            still.taken = false;
+        g_stillNoCursor = pointer != "pointer";
+        if (g_stillNoCursor)
+            g_pHyprRenderer->setCursorHidden(true);
+        damageEveryMonitor();
+        return "ok";
+    }
+    if (what == "off") {
+        g_stillWanted = false;
+        for (auto& [name, still] : g_stills)
+            still.taken = false;
+        if (g_stillNoCursor)
+            g_pHyprRenderer->setCursorHidden(false);
+        g_stillNoCursor = false;
+        damageEveryMonitor();
+        return "ok";
+    }
+    if (what == "state") {
+        const auto& monitors = State::monitorState()->monitors();
+        const bool  all      = std::ranges::all_of(monitors, [](const PHLMONITOR& m) { return !m || !m->m_enabled || stillTaken(m); });
+        return g_stillWanted && all ? "frozen" : g_stillWanted ? "waiting" : "live";
+    }
+    if (what == "save") {
+        double      x = 0, y = 0, w = 0, h = 0;
+        std::string rect, path;
+        in >> rect;
+        std::getline(in >> std::ws, path);
+        if (std::sscanf(rect.c_str(), "%lf,%lf,%lf,%lf", &x, &y, &w, &h) != 4 || path.empty())
+            return "usage: varunaglass freeze save x,y,w,h <path>";
+        const CBox box{x, y, w, h};
+        const auto mon = State::monitorState()->query().vec(box.middle()).run();
+        if (!mon)
+            return "no monitor there";
+        return writeStillPng(mon, box, path) ? "ok" : "not frozen";
+    }
+    return "usage: varunaglass freeze on [pointer]|off|state|save x,y,w,h <path>";
+}
+
+static void freeStills() {
+    for (auto& [name, still] : g_stills) {
+        glDeleteFramebuffers(1, &still.fb);
+        glDeleteTextures(1, &still.tex);
+    }
+    g_stills.clear();
+}
+
 // ------------------------------------------------------- windows and menus --
 
 static std::optional<uint8_t> windowGlassKind(const PHLWINDOW& w) {
@@ -1300,8 +1485,13 @@ static void onRenderPre(PHLMONITOR mon) {
 
 static void onRenderStage(eRenderStage stage) {
     if (stage == RENDER_LAST_MOMENT) {
-        if (const auto mon = g_pHyprRenderer->m_renderData.pMonitor.lock())
+        if (const auto mon = g_pHyprRenderer->m_renderData.pMonitor.lock()) {
+            if (g_stillWanted && !stillTaken(mon)) {
+                g_pHyprRenderer->m_renderPass.add(makeUnique<CStillElement>(mon, true));
+                g_pEventLoopManager->doLater([] { damageEveryMonitor(); });
+            }
             picker::onRenderLast(mon);
+        }
         return;
     }
     if (stage != RENDER_POST_WALLPAPER && stage != RENDER_POST_WINDOWS)
@@ -1310,6 +1500,8 @@ static void onRenderStage(eRenderStage stage) {
     if (!mon)
         return;
     const bool onDesktop = stage == RENDER_POST_WALLPAPER;
+    if (!onDesktop && g_stillWanted && stillTaken(mon))
+        g_pHyprRenderer->m_renderPass.add(makeUnique<CStillElement>(mon, false));
     if (!onDesktop) {
         // Minimizing windows draw over the others, under the Dock's glass.
         minimize::onRenderStage(mon);
@@ -1408,6 +1600,7 @@ static void stop() {
     freeGL();
     freeGenieGL();
     freeFrozen();
+    freeStills();
 }
 
 static const SHyprCtlCommand COMMAND = {.name = "varunaglass", .exact = false, .fn = onShapesCommand};
