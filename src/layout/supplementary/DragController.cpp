@@ -142,6 +142,7 @@ void CDragStateController::dragBegin(SP<ITarget> target, eMouseBindMode mode, st
 
     m_mouseMoveEventCount = 1;
     m_beginDragSizeXY     = Vector2D();
+    m_movedYet            = false;
 
     // Window will be floating. Let's check if it's valid. It should be, but I don't like crashing.
     if (!validMapped(DRAGGINGTARGET->window())) {
@@ -319,6 +320,18 @@ void CDragStateController::mouseMove(const Vector2D& mousePos) {
         m_dragThresholdReached = true;
         if (updateDragWindow())
             return;
+    }
+
+    if (!m_movedYet) {
+        m_movedYet = true;
+        if (m_dragMode == MBIND_MOVE && DRAGGINGTARGET->floating() && Varuna::onFloatingDragMoved(DRAGGINGTARGET)) {
+            const auto BOX        = DRAGGINGTARGET->position();
+            m_beginDragXY         = mousePos;
+            m_lastDragXY          = mousePos;
+            m_beginDragPositionXY = BOX.pos();
+            m_beginDragSizeXY     = BOX.size();
+            return;
+        }
     }
 
     static auto TIMER = std::chrono::high_resolution_clock::now(), MSTIMER = TIMER;

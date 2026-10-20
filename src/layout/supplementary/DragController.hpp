@@ -45,6 +45,7 @@ namespace Layout::Supplementary {
         bool                               m_wasDraggingWindow    = false;
         bool                               m_dragThresholdReached = false;
         bool                               m_draggingTiled        = false;
+        bool m_movedYet = false;
         bool                               m_exclusiveDeviceGrab  = false;
 
         int                                m_mouseMoveEventCount = 0;

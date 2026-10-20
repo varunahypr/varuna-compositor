@@ -13,4 +13,5 @@ namespace Varuna {
     bool onMaximizeRequest(const PHLWINDOW& window, bool on);
     void onDraggedOutOfTiling(const SP<Layout::ITarget>& target, const CBox& tiled);
     bool keepClear(const PHLWINDOW& window, CBox& box);
+    bool onFloatingDragMoved(const SP<Layout::ITarget>& target);
 }

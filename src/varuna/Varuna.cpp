@@ -940,3 +940,7 @@ void Varuna::onDraggedOutOfTiling(const SP<Layout::ITarget>& target, const CBox&
 bool Varuna::keepClear(const PHLWINDOW& window, CBox& box) {
     return keepclear::keepClear(window, box);
 }
+
+bool Varuna::onFloatingDragMoved(const SP<Layout::ITarget>& target) {
+    return snap::restoreOnDrag(target);
+}

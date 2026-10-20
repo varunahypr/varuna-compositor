@@ -215,41 +215,29 @@ static void place(const PHLWINDOW& w, const CBox& box, bool snap = true) {
     target->setPositionGlobal(to);
 }
 
-static PHLWINDOWREF g_seenDrag;
-
-/// A snapped window dragged: its size back.
-static void restoreOnDrag() {
-    const auto& dc     = g_layoutManager->dragController();
-    const auto  target = dc ? dc->target() : nullptr;
-    const auto  w      = target ? target->window() : nullptr;
-    if (!w || dc->mode() != MBIND_MOVE) {
-        g_seenDrag.reset();
-        return;
-    }
-    // Once per drag.
-    if (g_seenDrag.lock() == w)
-        return;
-    g_seenDrag   = w;
+/// A snapped window dragged: its size back (the drag controller asks on
+/// the drag's first move, and starts the drag over from the new box).
+static bool restoreOnDrag(const SP<Layout::ITarget>& target) {
+    const auto w = target ? target->window() : nullptr;
+    if (!w)
+        return false;
     const auto it = g_snapped.find(w.get());
     if (it == g_snapped.end())
-        return;
+        return false;
     const SSnapped s = it->second;
     g_snapped.erase(it);
     const CBox now = boxOf(w);
-    // Resized since: that size stays.
-    if (!w->m_isFloating || !near(now, s.at) || now.w < 1 || now.h < 1)
-        return;
+    if (!w->m_isFloating || now.w < 1 || now.h < 1)
+        return false;
     // The grabbed spot stays under it.
     const Vector2D p  = g_pInputManager->getMouseCoordsInternal();
     const double   fx = std::clamp((p.x - now.x) / now.w, 0.0, 1.0);
     const double   dy = std::clamp(p.y - now.y, 0.0, std::max(0.0, s.before.h - 1.0));
     const CBox     back{p.x - fx * s.before.w, p.y - dy, s.before.w, s.before.h};
-    // The drag starts again from there.
-    dc->dragEnd();
     target->setPositionGlobal(back);
     w->positionAnimation()->warp();
     w->sizeAnimation()->warp();
-    dc->dragBegin(target, MBIND_MOVE);
+    return true;
 }
 
 // ---- dragging
@@ -273,10 +261,11 @@ static void setZone(Zone z, const PHLMONITOR& mon) {
 }
 
 static void onMove() {
-    restoreOnDrag();
     const auto& dc     = g_layoutManager->dragController();
     const auto  target = dc ? dc->target() : nullptr;
     const auto  w      = target ? target->window() : nullptr;
+    if (w && dc->mode() == MBIND_RESIZE)
+        g_snapped.erase(w.get());
     if (!g_on || !w || !w->m_isFloating || dc->mode() != MBIND_MOVE) {
         if (g_zone != Zone::None)
             setZone(Zone::None, nullptr);
