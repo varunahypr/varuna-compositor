@@ -13,6 +13,7 @@ commits=$(git rev-list --count HEAD)
 commit=$(git rev-parse HEAD)
 short=$(git rev-parse --short=7 HEAD)
 branch=$(git rev-parse --abbrev-ref HEAD)
+[ "$branch" != HEAD ] || branch=varuna/main
 date=$(LC_ALL=C git log -1 --format=%cd --date=format:'%a %b %d %H:%M:%S %Y')
 
 work=$(mktemp -d)
