@@ -97,6 +97,7 @@ namespace Render {
         bool                                isMgpu();
         void                                addWindowToRenderUnfocused(PHLWINDOW window);
         SP<IFramebuffer>                    makeSnapshotFB(PHLWINDOW);
+        void                                renderWindowAtOrigin(PHLWINDOW, PHLMONITOR, bool standalone);
         SP<IFramebuffer>                    makeSnapshotFB(PHLLS);
         SP<IFramebuffer>                    makeSnapshotFB(WP<Desktop::View::CPopup>);
         void                                renderFadeouts(PHLMONITOR monitor, Desktop::eFadeoutPlane plane, PHLWORKSPACE workspace = nullptr);

@@ -948,6 +948,9 @@ void IHyprRenderer::renderLayer(PHLLS pLayer, PHLMONITOR pMonitor, const Time::s
         (lockscreen && !pLayer->m_ruleApplicator->aboveLock().valueOrDefault()))
         return;
 
+    if (!popups)
+        Varuna::beforeLayer(pLayer, pMonitor);
+
     static auto PDIMAROUND = CConfigValue<Config::FLOAT>("decoration:dim_around");
 
     if (*PDIMAROUND && pLayer->m_ruleApplicator->dimAround().valueOrDefault() && !m_bRenderingSnapshot && !popups) {
@@ -3091,6 +3094,10 @@ void IHyprRenderer::addWindowToRenderUnfocused(PHLWINDOW window) {
 
     if (!m_renderUnfocusedTimer->armed())
         m_renderUnfocusedTimer->updateTimeout(std::chrono::milliseconds(1000 / *PFPS));
+}
+
+void IHyprRenderer::renderWindowAtOrigin(PHLWINDOW pWindow, PHLMONITOR pMonitor, bool standalone) {
+    renderWindow(pWindow, pMonitor, Time::steadyNow(), false, RENDER_PASS_ALL, true, standalone);
 }
 
 SP<IFramebuffer> IHyprRenderer::makeSnapshotFB(PHLWINDOW pWindow) {

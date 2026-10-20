@@ -58,6 +58,7 @@
 #include "keepclear.hpp"
 #include "requests.hpp"
 #include "minimize.hpp"
+#include "mission.hpp"
 #include "picker.hpp"
 #include "wallpaper.hpp"
 #include "edge.hpp"
@@ -453,7 +454,7 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     in >> cmd >> sub;
     // Minimizing into the Dock (minimize.hpp).
     if (sub == "features")
-        return "minimize fullscreen edges wallpaper pick desktopglass";
+        return "minimize fullscreen edges wallpaper pick desktopglass mission";
     if (sub == "minimize" || sub == "restore" || sub == "snapinfo" || sub == "where")
         return minimize::command(sub, in);
     // Snapping a floating window (snap.hpp).
@@ -461,6 +462,8 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
         return wallpaper::command(in);
     if (sub == "pick")
         return picker::command(in);
+    if (sub == "mission")
+        return mission::command(in);
     if (sub == "edge")
         return edges::command(in);
     if (sub == "snap")
@@ -1338,6 +1341,11 @@ static void start() {
     picker::g_draw        = drawPicker;
     picker::g_colourAt    = pickedColour;
     picker::g_forget      = forgetFrozen;
+    mission::g_drawBackdrop = [](const PHLMONITOR& mon, float opacity) {
+        SGlass backdrop{CBox{{}, mon->m_size}, 0.f, 0.f, KIND_BACKDROP};
+        backdrop.opacity = opacity;
+        g_pHyprRenderer->m_renderPass.add(makeUnique<CGlassElement>(mon, backdrop));
+    };
     picker::init();
     static auto glassOnOpen = Event::bus()->m_events.window.open.listen([](PHLWINDOW w) { addWindowGlass(w); });
     for (const auto& w : Desktop::windowState()->windows())
@@ -1359,6 +1367,7 @@ static void start() {
 }
 
 static void stop() {
+    mission::stop();
     picker::stop();
     wallpaper::stop();
     edges::stop();
@@ -1387,6 +1396,10 @@ void Varuna::init() {
 
 void Varuna::stop() {
     ::stop();
+}
+
+void Varuna::beforeLayer(const PHLLS& layer, const PHLMONITOR& monitor) {
+    mission::beforeLayer(layer, monitor);
 }
 
 bool Varuna::drawWallpaper(const PHLMONITOR& monitor) {
