@@ -417,6 +417,14 @@ Vector2D CPopup::coordsGlobal() const {
     return localToGlobal(coordsRelativeToParent());
 }
 
+CBox CPopup::visibleBox() const {
+    const auto POS = coordsGlobal();
+    const auto XDG = m_resource ? m_resource->m_surface.lock() : nullptr;
+    if (!XDG || XDG->m_current.geometry.empty())
+        return CBox{POS, size()};
+    return CBox{POS + XDG->m_current.geometry.pos(), XDG->m_current.geometry.size()};
+}
+
 Vector2D CPopup::localToGlobal(const Vector2D& rel) const {
     return t1ParentCoords() + rel;
 }

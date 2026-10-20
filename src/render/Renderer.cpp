@@ -76,6 +76,8 @@ using namespace NColorManagement;
 using namespace Desktop::View;
 using namespace Render;
 
+#include "../varuna/Varuna.hpp"
+
 extern "C" {
 #include <xf86drm.h>
 }
@@ -785,6 +787,8 @@ void IHyprRenderer::renderWindow(PHLWINDOW pWindow, PHLMONITOR pMonitor, const T
                     renderdata.pos += pos;
                     renderdata.fadeAlpha = popup->alpha()[POPUP_ALPHA_FADE]->value();
 
+                    Varuna::beforePopup(popup.lock(), renderdata.pMonitor.lock());
+
                     popup->wlSurface()->resource()->breadthfirst(
                         [this, &renderdata](SP<CWLSurfaceResource> s, const Vector2D& offset, void* data) {
                             if (!s->m_current.texture)
@@ -1016,6 +1020,8 @@ void IHyprRenderer::renderLayer(PHLLS pLayer, PHLMONITOR pMonitor, const Time::s
 
                 if (SURF->m_current.size.x < 1 || SURF->m_current.size.y < 1)
                     return;
+
+                Varuna::beforePopup(popup.lock(), renderdata.pMonitor.lock());
 
                 Vector2D pos           = popup->coordsRelativeToParent();
                 renderdata.localPos    = pos;

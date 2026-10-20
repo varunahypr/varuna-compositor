@@ -95,6 +95,8 @@ struct SSettings {
     // The top bar: veil glass always frosted (its own blur).
     float    barBlur;
     SSurface dock, bar;
+    bool     menus;
+    float    menuRadius;
 };
 
 static SSettings        g_settings;
@@ -138,6 +140,8 @@ static SSettings settingsFrom(const Values& v) {
         .barBlur           = num("bar_blur"),
         .dock              = {flag("dock"), num("dock_padding"), num("dock_radius"), true},
         .bar               = {flag("bar"), num("bar_padding"), num("bar_radius"), false},
+        .menus             = flag("menus"),
+        .menuRadius        = num("menu_radius"),
     };
 }
 
@@ -784,6 +788,76 @@ void CGlassElement::render(const PHLMONITOR& mon) {
     st.restore();
 }
 
+// ------------------------------------------------------- windows and menus --
+
+static std::optional<uint8_t> windowGlassKind(const PHLWINDOW& w) {
+    const auto& tags = w->m_ruleApplicator->m_tagKeeper;
+    if (tags.isTagged("glass"))
+        return KIND_VEIL;
+    if (tags.isTagged("glass-clear"))
+        return KIND_CLEAR;
+    return std::nullopt;
+}
+
+class CWindowGlass : public IHyprWindowDecoration {
+  public:
+    explicit CWindowGlass(PHLWINDOW w) : IHyprWindowDecoration(w), m_window(w) {}
+
+    SDecorationPositioningInfo getPositioningInfo() override {
+        return {};
+    }
+
+    void onPositioningReply(const SDecorationPositioningReply&) override {}
+
+    eDecorationType getDecorationType() override {
+        return DECORATION_CUSTOM;
+    }
+
+    void updateWindow(PHLWINDOW) override {}
+
+    void damageEntire() override {}
+
+    eDecorationLayer getDecorationLayer() override {
+        return DECORATION_LAYER_BOTTOM;
+    }
+
+    uint64_t getDecorationFlags() override {
+        return DECORATION_NON_SOLID;
+    }
+
+    std::string getDisplayName() override {
+        return "VarunaWindowGlass";
+    }
+
+    void draw(PHLMONITOR mon, float const& a) override {
+        const auto w    = m_window.lock();
+        const auto kind = w && mon && g_settings.enabled ? windowGlassKind(w) : std::nullopt;
+        if (!kind)
+            return;
+        CBox box = w->getWindowMainSurfaceBox();
+        if (w->m_workspace && !w->m_pinned)
+            box.translate(w->m_workspace->m_renderOffset->value());
+        box.translate(w->m_floatingOffset - mon->m_position);
+        g_pHyprRenderer->m_renderPass.add(makeUnique<CGlassElement>(mon, SGlass{box, sc<float>(w->rounding()), 0.f, *kind, -1, 0, 0, false, a}));
+    }
+
+  private:
+    PHLWINDOWREF m_window;
+};
+
+static void addWindowGlass(const PHLWINDOW& w) {
+    if (w)
+        w->addWindowDeco(makeUnique<CWindowGlass>(w));
+}
+
+static bool popupWantsGlass(const SP<Desktop::View::CPopup>& popup) {
+    if (const auto ls = popup->layerOwner())
+        return ls->m_namespace.starts_with("varuna");
+    const auto owner = popup->getT1Owner();
+    const auto w     = owner ? dynamicPointerCast<Desktop::View::CWindow>(owner->view()) : nullptr;
+    return w && snap::isGtk(w->getPID());
+}
+
 // ------------------------------------------------------------------ hooks --
 
 static void onRenderPre(PHLMONITOR mon) {
@@ -861,6 +935,9 @@ static void start() {
     corners::init();
     edges::init();
     zoom::init();
+    static auto glassOnOpen = Event::bus()->m_events.window.open.listen([](PHLWINDOW w) { addWindowGlass(w); });
+    for (const auto& w : Desktop::windowState()->windows())
+        addWindowGlass(w);
     minimize::init();
     titlebar::init();
     g_settings = settingsFrom(defaultValues());
@@ -922,4 +999,13 @@ bool Varuna::keepClear(const PHLWINDOW& window, CBox& box) {
 
 bool Varuna::onFloatingDragMoved(const SP<Layout::ITarget>& target) {
     return snap::restoreOnDrag(target);
+}
+
+void Varuna::beforePopup(const SP<Desktop::View::CPopup>& popup, const PHLMONITOR& monitor) {
+    if (!popup || !monitor || !g_settings.enabled || !g_settings.menus || !popupWantsGlass(popup))
+        return;
+    CBox box = popup->visibleBox();
+    box.translate(-monitor->m_position);
+    const float alpha = popup->alpha()[Desktop::View::POPUP_ALPHA_FADE]->value();
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CGlassElement>(monitor, SGlass{box, g_settings.menuRadius, 0.f, KIND_VEIL, -1, 0, 0, false, alpha}));
 }

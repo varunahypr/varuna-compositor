@@ -51,6 +51,7 @@ namespace Desktop::View {
         PHLLS                                               layerOwner() const;
         Vector2D                                            coordsRelativeToParent() const;
         Vector2D                                            coordsGlobal() const;
+        CBox                                                visibleBox() const;
         PHLMONITOR                                          getMonitor() const;
 
         Vector2D                                            size() const;

@@ -32,6 +32,8 @@ static const SGlassField GLASS_FIELDS[] = {
     {"bar_padding", false, (float)0, (float)64, (float)0},
     {"bar_radius", false, (float)0, (float)128, (float)0},
     {"bar_blur", false, (float)0, (float)64, (float)40},
+    {"menus", true, (float)0, (float)1, (float)0},
+    {"menu_radius", false, (float)0, (float)64, (float)14},
     {"snap", true, (float)0, (float)1, (float)0},
     {"snap_gap", false, (float)0, (float)64, (float)8},
     {"snap_gap_in", false, (float)0, (float)64, (float)4},
