@@ -79,6 +79,7 @@
 #include "edge.hpp"
 #include "snap.hpp"
 #include "corners.hpp"
+#include "edges.hpp"
 #include "titlebar.hpp"
 #include "conf.hpp"
 #include "shaders.hpp"
@@ -453,10 +454,12 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     in >> cmd >> sub;
     // Minimizing into the Dock (minimize.hpp).
     if (sub == "features")
-        return "minimize fullscreen";
+        return "minimize fullscreen edges";
     if (sub == "minimize" || sub == "restore" || sub == "snapinfo" || sub == "where")
         return minimize::command(sub, in);
     // Snapping a floating window (snap.hpp).
+    if (sub == "edge")
+        return edges::command(in);
     if (sub == "snap")
         return snap::command(in);
     if (sub == "fill")
@@ -876,6 +879,7 @@ static void start() {
     requests::g_limited       = snap::limited;
     snap::init();
     corners::init();
+    edges::init();
     minimize::init();
     titlebar::init();
     g_settings = settingsFrom(defaultValues());
@@ -891,6 +895,7 @@ static void start() {
 }
 
 static void stop() {
+    edges::stop();
     titlebar::stop();
     snap::stop();
     minimize::stop();
