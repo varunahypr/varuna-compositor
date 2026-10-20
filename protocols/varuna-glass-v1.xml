@@ -30,7 +30,7 @@
     its content on the same frame.
   </description>
 
-  <interface name="varuna_glass_manager_v1" version="1">
+  <interface name="varuna_glass_manager_v1" version="2">
     <request name="destroy" type="destructor">
       <description summary="destroy the manager">
         Glass objects already made stay valid.
@@ -50,7 +50,7 @@
     </enum>
   </interface>
 
-  <interface name="varuna_glass_v1" version="1">
+  <interface name="varuna_glass_v1" version="2">
     <description summary="the glass behind one surface">
       All state is double-buffered: it applies on the next wl_surface.commit.
       Until then the pieces already applied keep being drawn.
@@ -63,6 +63,8 @@
       <entry name="bar" value="3" summary="always frosted, for the menu bar"/>
       <entry name="liquid" value="4" summary="a drop, pulled out as it moves"/>
       <entry name="backdrop" value="5" summary="the screen out of focus, dimmed"/>
+      <entry name="frosted" value="7" summary="frosted and tinted, for dialog cards" since="2"/>
+      <entry name="scrim" value="8" summary="a flat wash of the piece's tint over the screen, for dialogs" since="2"/>
     </enum>
 
     <request name="destroy" type="destructor">
@@ -87,6 +89,17 @@
         clears the glass.
       </description>
       <arg name="pieces" type="array" summary="int32 x8 per piece; geometry in 1/256 px"/>
+    </request>
+
+    <request name="set_piece_looks" since="2">
+      <description summary="a look for each piece">
+        One kind per piece, in the order of set_pieces, for a surface whose
+        pieces don't all look alike (a dialog: a scrim over the screen and a
+        frosted card). Pieces past the end of the array, or all of them while
+        the array is empty, take the kind from set_look. Scrim pieces are
+        drawn first, then backdrop pieces, then the rest.
+      </description>
+      <arg name="kinds" type="array" summary="uint32 per piece, from the kind enum"/>
     </request>
   </interface>
 </protocol>

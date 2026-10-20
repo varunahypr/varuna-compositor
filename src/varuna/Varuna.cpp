@@ -397,7 +397,15 @@ enum eKind : uint8_t {
     KIND_LIQUID,
     KIND_BACKDROP,
     KIND_PANE,
+    KIND_FROSTED,
+    KIND_SCRIM,
 };
+
+static constexpr float SCRIM_ALPHA = 0.45f;
+
+static bool            sentKind(uint32_t kind) {
+    return kind <= KIND_BACKDROP || kind == KIND_FROSTED || kind == KIND_SCRIM;
+}
 
 struct SOptics {
     float blur, tint, lift, r, g, b, saturation, rim, grain = 0.f;
@@ -423,6 +431,8 @@ static SOptics opticsFor(uint8_t kind) {
     // dimmed (varuna_glass::BACKDROP_BLUR, BACKDROP_DIM); flat.
     if (kind == KIND_BACKDROP)
         return {48.f, 0.35f, 0.f, 0.04f, 0.04f, 0.06f, 1.2f, 0.f, 0.f, 0.f, false};
+    if (kind == KIND_FROSTED)
+        return {std::max(s.platterBlur, 10.f), std::min(s.tint + 0.45f, 0.85f), 0.f, s.tintR, s.tintG, s.tintB, s.saturation, s.rim};
     if (kind == KIND_PANE)
         return {s.blur + 0.25f * s.platterBlur, s.veilWhite, 0.f, 1.f, 1.f, 1.f, s.saturation, s.rim * 1.2f, 0.f, 0.f, true, 1.6f};
     return {s.blur, s.tint, s.lift, s.tintR, s.tintG, s.tintB, s.saturation, s.rim};
@@ -434,6 +444,7 @@ struct SShape {
     float  radius;
     int    tint = -1;      // optional 6th field, rrggbb
     float  sx = 0, sy = 0; // optional 7th and 8th: a drop's stretch
+    int    kind = -1;
 };
 static std::map<std::string, std::vector<SShape>> g_shapes;
 /// Each namespace's kind of glass (`shapes <ns> platter|veil|bar ...`; clear
@@ -599,11 +610,11 @@ static std::vector<SGlass> glassesFor(const PHLMONITOR& mon) {
             for (const auto& sh : it->second) {
                 CBox          b{ls->m_geometry.x - mon->m_position.x + sh.x, ls->m_geometry.y - mon->m_position.y + sh.y, sh.w, sh.h};
                 const auto    k    = g_kind.find(it->first);
-                const uint8_t kind = k == g_kind.end() ? (uint8_t)KIND_CLEAR : k->second;
+                const uint8_t kind = sh.kind >= 0 ? sc<uint8_t>(sh.kind) : k == g_kind.end() ? (uint8_t)KIND_CLEAR : k->second;
                 // A drop's tail reaches past its box: room for it; a lifted
                 // piece's shadow reaches further.
                 const bool  lifted = g_lifted.contains(it->first);
-                const float shadow = kind == KIND_BACKDROP ? 0.f : kind == KIND_LIQUID ? 26.f : lifted ? LIFTED_SHADOW : 10.f;
+                const float shadow = kind == KIND_BACKDROP || kind == KIND_SCRIM ? 0.f : kind == KIND_LIQUID ? 26.f : lifted ? LIFTED_SHADOW : 10.f;
                 out.push_back({b, sh.radius, shadow, kind, sh.tint, sh.sx, sh.sy, lifted, alpha});
                 out.back().onDesktop = ls->m_layer <= ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM;
             }
@@ -629,6 +640,7 @@ static std::vector<SGlass> glassesFor(const PHLMONITOR& mon) {
     }
     // A backdrop goes first: the glass over it refracts the blurred screen.
     std::stable_partition(out.begin(), out.end(), [](const SGlass& g) { return g.kind == KIND_BACKDROP; });
+    std::stable_partition(out.begin(), out.end(), [](const SGlass& g) { return g.kind == KIND_SCRIM; });
     return out;
 }
 
@@ -687,7 +699,11 @@ void CGlassElement::render(const PHLMONITOR& mon) {
     // The bubble's drop: clear glass with a little of its colour dissolved
     // in it (varuna_glass::LIQUID_DYE), its edge rippling.
     const bool liquid = m_glass.kind == KIND_LIQUID;
-    if (liquid && m_glass.tint >= 0) {
+    if (m_glass.kind == KIND_FROSTED && m_glass.tint >= 0) {
+        o.r = ((m_glass.tint >> 16) & 0xff) / 255.f;
+        o.g = ((m_glass.tint >> 8) & 0xff) / 255.f;
+        o.b = (m_glass.tint & 0xff) / 255.f;
+    } else if (liquid && m_glass.tint >= 0) {
         o.r    = ((m_glass.tint >> 16) & 0xff) / 255.f;
         o.g    = ((m_glass.tint >> 8) & 0xff) / 255.f;
         o.b    = (m_glass.tint & 0xff) / 255.f;
@@ -1468,11 +1484,11 @@ static void onRenderPre(PHLMONITOR mon) {
     std::vector<CBox> seen;
     std::vector<bool> done(glasses.size(), false);
     for (const auto& g : glasses)
-        seen.push_back(g.box.copy().expand(std::max<double>(reach(opticsFor(g.kind).blur), g.shadow)).scale(mon->m_scale).round());
+        seen.push_back(g.kind == KIND_SCRIM ? CBox{} : g.box.copy().expand(std::max<double>(reach(opticsFor(g.kind).blur), g.shadow)).scale(mon->m_scale).round());
     for (bool grew = true; grew;) {
         grew = false;
         for (size_t i = 0; i < glasses.size(); i++) {
-            if (done[i] || damage.copy().intersect(seen[i]).empty())
+            if (done[i] || seen[i].empty() || damage.copy().intersect(seen[i]).empty())
                 continue;
             done[i] = true;
             grew    = true;
@@ -1480,6 +1496,15 @@ static void onRenderPre(PHLMONITOR mon) {
             mon->m_damage.damage(seen[i]);
         }
     }
+}
+
+static void addScrim(const PHLMONITOR& mon, const SGlass& g) {
+    const int                   tint = std::max(g.tint, 0);
+    CRectPassElement::SRectData data;
+    data.box   = g.box.copy().scale(mon->m_scale).round();
+    data.color = CHyprColor(((tint >> 16) & 0xff) / 255.f, ((tint >> 8) & 0xff) / 255.f, (tint & 0xff) / 255.f, SCRIM_ALPHA * g.opacity);
+    data.round = sc<int>(std::round(g.radius * mon->m_scale));
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CRectPassElement>(data));
 }
 
 static void onRenderStage(eRenderStage stage) {
@@ -1510,6 +1535,10 @@ static void onRenderStage(eRenderStage stage) {
     for (const auto& g : glassesFor(mon)) {
         if (g.onDesktop != onDesktop)
             continue;
+        if (g.kind == KIND_SCRIM) {
+            addScrim(mon, g);
+            continue;
+        }
         g_pHyprRenderer->m_renderPass.add(makeUnique<CGlassElement>(mon, g));
         // The drop keeps moving: draw it again next frame.
         if (g.kind == KIND_LIQUID)
@@ -1556,12 +1585,16 @@ static void start() {
     places::init();
     showdesktop::init();
     switcher::init();
-    glass_protocol::init([](const std::string& key, uint8_t kind, bool lifted, std::vector<glass_protocol::SPiece> pieces) {
+    glass_protocol::init([](const std::string& key, uint8_t kind, bool lifted, std::vector<glass_protocol::SPiece> pieces, std::vector<uint8_t> kinds) {
         std::vector<SShape> shapes;
-        for (const auto& p : pieces)
-            if (p.w > 1 && p.h > 1)
-                shapes.push_back({p.x, p.y, p.w, p.h, p.radius, p.tint, p.sx, p.sy});
-        applyShapes(key, kind <= KIND_BACKDROP ? kind : (uint8_t)KIND_CLEAR, lifted, std::move(shapes));
+        for (size_t i = 0; i < pieces.size(); i++) {
+            const auto& p = pieces[i];
+            if (p.w <= 1 || p.h <= 1)
+                continue;
+            const int own = i < kinds.size() && sentKind(kinds[i]) ? kinds[i] : -1;
+            shapes.push_back({p.x, p.y, p.w, p.h, p.radius, p.tint, p.sx, p.sy, own});
+        }
+        applyShapes(key, sentKind(kind) ? kind : (uint8_t)KIND_CLEAR, lifted, std::move(shapes));
     });
     static auto glassOnOpen = Event::bus()->m_events.window.open.listen([](PHLWINDOW w) { addWindowGlass(w); });
     for (const auto& w : Desktop::windowState()->windows())
@@ -1622,7 +1655,7 @@ void Varuna::beforeLayer(const PHLLS& layer, const PHLMONITOR& monitor) {
 }
 
 std::string Varuna::features() {
-    return "minimize fullscreen edges wallpaper pick desktopglass mission glassprotocol places showdesktop switcher freeze";
+    return "minimize fullscreen edges wallpaper pick desktopglass mission glassprotocol places showdesktop switcher freeze dialogglass";
 }
 
 bool Varuna::drawWallpaper(const PHLMONITOR& monitor) {

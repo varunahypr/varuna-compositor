@@ -26,7 +26,7 @@ namespace glass_protocol {
         float  sx, sy;
     };
 
-    using Apply = std::function<void(const std::string& key, uint8_t kind, bool lifted, std::vector<SPiece> pieces)>;
+    using Apply = std::function<void(const std::string& key, uint8_t kind, bool lifted, std::vector<SPiece> pieces, std::vector<uint8_t> kinds)>;
     static Apply               g_apply;
 
     static std::vector<SPiece> piecesFrom(wl_array* array) {
@@ -41,6 +41,16 @@ namespace glass_protocol {
                               sc<float>(v[7] / STRETCH_UNITS)});
         }
         return pieces;
+    }
+
+    static std::vector<uint8_t> kindsFrom(wl_array* array) {
+        std::vector<uint8_t> kinds;
+        if (!array)
+            return kinds;
+        const auto* values = static_cast<const uint32_t*>(array->data);
+        for (size_t i = 0; i < array->size / sizeof(uint32_t); i++)
+            kinds.push_back(sc<uint8_t>(std::min<uint32_t>(values[i], UINT8_MAX)));
+        return kinds;
     }
 
     static std::string keyOf(const SP<CWLSurfaceResource>& surface) {
@@ -69,6 +79,10 @@ namespace glass_protocol {
                 m_pending.pieces = piecesFrom(pieces);
                 m_dirty          = true;
             });
+            m_resource->setSetPieceLooks([this](CVarunaGlassV1*, wl_array* kinds) {
+                m_pending.kinds = kindsFrom(kinds);
+                m_dirty         = true;
+            });
             m_committed = surface->m_events.commit.listen([this] { apply(); });
             m_gone      = surface->m_events.destroy.listen([this] { clear(); });
         }
@@ -89,9 +103,10 @@ namespace glass_protocol {
 
       private:
         struct SState {
-            uint8_t             kind   = 0;
-            bool                lifted = false;
-            std::vector<SPiece> pieces;
+            uint8_t              kind   = 0;
+            bool                 lifted = false;
+            std::vector<SPiece>  pieces;
+            std::vector<uint8_t> kinds;
         };
 
         UP<CVarunaGlassV1>     m_resource;
@@ -108,19 +123,19 @@ namespace glass_protocol {
                 return;
             const auto key = keyOf(surface);
             if (key != m_key && !m_key.empty())
-                g_apply(m_key, 0, false, {});
+                g_apply(m_key, 0, false, {}, {});
             if (key.empty())
                 return;
             if (!m_dirty && key == m_key)
                 return;
             m_key   = key;
             m_dirty = false;
-            g_apply(key, m_pending.kind, m_pending.lifted, m_pending.pieces);
+            g_apply(key, m_pending.kind, m_pending.lifted, m_pending.pieces, m_pending.kinds);
         }
 
         void clear() {
             if (!m_key.empty() && g_apply)
-                g_apply(m_key, 0, false, {});
+                g_apply(m_key, 0, false, {}, {});
             m_key.clear();
         }
 
@@ -169,7 +184,7 @@ namespace glass_protocol {
 
     static void          init(Apply apply) {
         g_apply    = std::move(apply);
-        g_protocol = makeUnique<CProtocol>(&varuna_glass_manager_v1_interface, 1, "VarunaGlass");
+        g_protocol = makeUnique<CProtocol>(&varuna_glass_manager_v1_interface, 2, "VarunaGlass");
     }
 
     static void stop() {
