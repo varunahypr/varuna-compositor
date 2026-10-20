@@ -80,6 +80,7 @@
 #include "snap.hpp"
 #include "corners.hpp"
 #include "edges.hpp"
+#include "zoom.hpp"
 #include "titlebar.hpp"
 #include "conf.hpp"
 #include "shaders.hpp"
@@ -880,6 +881,7 @@ static void start() {
     snap::init();
     corners::init();
     edges::init();
+    zoom::init();
     minimize::init();
     titlebar::init();
     g_settings = settingsFrom(defaultValues());
@@ -889,13 +891,16 @@ static void start() {
     static auto P1 = Event::bus()->m_events.render.pre.listen([](PHLMONITOR m) { onRenderPre(m); });
     static auto P2 = Event::bus()->m_events.render.stage.listen([](eRenderStage s) { onRenderStage(s); });
     static auto P3 = Event::bus()->m_events.window.close.listen([](PHLWINDOW w) {
-        if (w)
+        if (w) {
             minimize::forget(w.get());
+            zoom::forget(w.get());
+        }
     });
 }
 
 static void stop() {
     edges::stop();
+    zoom::stop();
     titlebar::stop();
     snap::stop();
     minimize::stop();
