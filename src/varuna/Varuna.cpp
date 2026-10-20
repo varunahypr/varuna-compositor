@@ -58,6 +58,7 @@
 #include "keepclear.hpp"
 #include "requests.hpp"
 #include "minimize.hpp"
+#include "showdesktop.hpp"
 #include "places.hpp"
 #include "glass_protocol.hpp"
 #include "mission.hpp"
@@ -499,7 +500,7 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     in >> cmd >> sub;
     // Minimizing into the Dock (minimize.hpp).
     if (sub == "features")
-        return "minimize fullscreen edges wallpaper pick desktopglass mission glassprotocol places";
+        return "minimize fullscreen edges wallpaper pick desktopglass mission glassprotocol places showdesktop";
     if (sub == "minimize" || sub == "restore" || sub == "snapinfo" || sub == "where")
         return minimize::command(sub, in);
     // Snapping a floating window (snap.hpp).
@@ -511,6 +512,8 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
         return mission::command(in);
     if (sub == "places")
         return places::command(in);
+    if (sub == "desktop")
+        return showdesktop::command(in);
     if (sub == "edge")
         return edges::command(in);
     if (sub == "snap")
@@ -1262,6 +1265,7 @@ static bool popupWantsGlass(const SP<Desktop::View::CPopup>& popup) {
 static void onRenderPre(PHLMONITOR mon) {
     minimize::onRenderPre(mon);
     keepclear::onRenderPre(mon);
+    showdesktop::onRenderPre(mon);
     loadSettings();
     // If anything the lens can see changed, redraw all it sees this frame
     // (added to the monitor's damage ring, so every buffer stays consistent).
@@ -1356,6 +1360,7 @@ static void start() {
     };
     picker::init();
     places::init();
+    showdesktop::init();
     glass_protocol::init([](const std::string& key, uint8_t kind, bool lifted, std::vector<glass_protocol::SPiece> pieces) {
         std::vector<SShape> shapes;
         for (const auto& p : pieces)
@@ -1383,6 +1388,7 @@ static void start() {
 }
 
 static void stop() {
+    showdesktop::stop();
     glass_protocol::stop();
     mission::stop();
     picker::stop();

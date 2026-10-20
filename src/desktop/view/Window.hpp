@@ -99,6 +99,7 @@ namespace Desktop::View {
         INPUT_BLOCK_GROUP_INACTIVE   = (1 << 0),
         INPUT_BLOCK_MONOCLE_INACTIVE = (1 << 1),
         INPUT_BLOCK_BELOW_FULLSCREEN = (1 << 2),
+        INPUT_BLOCK_SET_ASIDE        = (1 << 3),
 
         INPUT_BLOCK_ALL = std::numeric_limits<std::underlying_type_t<eWindowInputBlockReason>>::max(),
     };
