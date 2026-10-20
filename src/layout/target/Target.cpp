@@ -28,7 +28,7 @@ void ITarget::assignToSpace(const SP<CSpace>& space, std::optional<Vector2D> foc
 
     m_space = space;
 
-    if (space && HAD_SPACE)
+    if (space && (HAD_SPACE || focalPoint))
         space->move(m_self.lock(), focalPoint);
     else if (space)
         space->add(m_self.lock());

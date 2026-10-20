@@ -63,8 +63,9 @@ struct SAnim {
 };
 
 struct SMinimized {
-    PHLWINDOWREF        window;
-    std::optional<CBox> floating;
+    PHLWINDOWREF window;
+    CBox         was;
+    bool         floating = false;
 };
 
 static std::vector<SAnim>                                   g_anims;
@@ -183,7 +184,7 @@ static void hide(const PHLWINDOW& w) {
     if (Fullscreen::controller()->isFullscreen(w))
         Fullscreen::controller()->setFullscreenMode(w, Fullscreen::FSMODE_NONE, Fullscreen::FSMODE_NONE);
     const bool focused = Desktop::focusState()->window() == w;
-    g_minimized[w.get()] = {w, w->m_isFloating ? std::optional{windowBox(w, true)} : std::nullopt};
+    g_minimized[w.get()] = {.window = w, .was = windowBox(w, true), .floating = w->m_isFloating};
     g_layoutManager->removeTarget(w->layoutTarget());
     w->m_minimized = true;
     w->setHidden(true);
@@ -196,14 +197,14 @@ static void show(const PHLWINDOW& w) {
     const auto it = g_minimized.find(w.get());
     if (!w->m_minimized || it == g_minimized.end())
         return;
-    const auto floating = it->second.floating;
+    const auto was = it->second;
     g_minimized.erase(it);
     w->m_minimized = false;
     w->setHidden(false);
     if (w->m_workspace)
-        g_layoutManager->newTarget(w->layoutTarget(), w->m_workspace->m_space);
-    if (floating)
-        w->layoutTarget()->setPositionGlobal(*floating);
+        g_layoutManager->newTarget(w->layoutTarget(), w->m_workspace->m_space, was.floating ? std::nullopt : std::optional{was.was.middle()});
+    if (was.floating)
+        w->layoutTarget()->setPositionGlobal(was.was);
     announce(w);
 }
 

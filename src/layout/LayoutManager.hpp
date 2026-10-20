@@ -70,7 +70,7 @@ namespace Layout {
             RECALCULATE_MONITOR_REASON_TOGGLE_FULLSCREEN,
         };
 
-        void                    newTarget(SP<ITarget> target, SP<CSpace> space);
+        void                    newTarget(SP<ITarget> target, SP<CSpace> space, std::optional<Vector2D> focalPoint = std::nullopt);
         void                    removeTarget(SP<ITarget> target);
 
         void                    changeFloatingMode(SP<ITarget> target);

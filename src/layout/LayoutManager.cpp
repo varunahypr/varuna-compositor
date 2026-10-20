@@ -16,12 +16,12 @@ using namespace Layout;
 
 CLayoutManager::CLayoutManager() = default;
 
-void CLayoutManager::newTarget(SP<ITarget> target, SP<CSpace> space) {
+void CLayoutManager::newTarget(SP<ITarget> target, SP<CSpace> space, std::optional<Vector2D> focalPoint) {
     // on a new target: remember desired pos for float, if available
     if (const auto DESIRED_GEOM = target->desiredGeometry(); DESIRED_GEOM)
         target->rememberFloatingSize(DESIRED_GEOM->size);
 
-    target->assignToSpace(space);
+    target->assignToSpace(space, focalPoint);
 }
 
 void CLayoutManager::removeTarget(SP<ITarget> target) {
