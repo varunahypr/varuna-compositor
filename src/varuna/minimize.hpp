@@ -68,6 +68,9 @@ struct SMinimized {
     bool         floating = false;
 };
 
+static bool g_genie = false;
+static void (*g_drawGenie)(const PHLMONITOR& mon, const SPhoto& photo, const CBox& icon, const CBox& window, float progress, float alpha) = nullptr;
+
 static std::vector<SAnim>                                   g_anims;
 static std::map<const Desktop::View::CWindow*, SPhoto>      g_kept;
 static std::map<const Desktop::View::CWindow*, SMinimized>  g_minimized;
@@ -231,10 +234,24 @@ static void onRenderPre(const PHLMONITOR& mon) {
     }
 }
 
+static void drawGenie(const PHLMONITOR& mon, const SAnim& a, const PHLWINDOW& w) {
+    const float ms       = std::chrono::duration<float, std::milli>(Clock::now() - a.start).count();
+    const float t        = std::clamp(ms / (a.restore ? GROW_MS : SHRINK_MS), 0.F, 1.F);
+    const float progress = a.restore ? 1.F - easeInOut(t) : easeInOut(t);
+    const CBox  window   = a.restore && w ? windowBox(w, true) : a.photo.window;
+    const float alpha    = a.restore ? std::clamp(t / 0.35F, 0.F, 1.F) : 1.F - std::clamp((t - 0.8F) / 0.2F, 0.F, 1.F);
+    if (t < 1.F)
+        g_drawGenie(mon, a.photo, a.icon, window, progress, alpha);
+}
+
 static void onRenderStage(const PHLMONITOR& mon) {
     const CBox screen{mon->m_position.x, mon->m_position.y, mon->m_size.x, mon->m_size.y};
     for (const auto& a : g_anims) {
         const auto w = a.window.lock();
+        if (g_genie && g_drawGenie) {
+            drawGenie(mon, a, w);
+            continue;
+        }
         const auto f = frameOf(a, w);
         if (!f.done && !f.box.copy().intersection(screen).empty())
             draw(mon, a.photo, f.box, f.alpha);
