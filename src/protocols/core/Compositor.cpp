@@ -96,9 +96,11 @@ CWLSurfaceResource::CWLSurfaceResource(SP<CWlSurface> resource_) : m_resource(re
 
     m_resource->setAttach([this](CWlSurface* r, wl_resource* buffer, int32_t x, int32_t y) {
         m_pending.updated.bits.buffer = true;
-        m_pending.updated.bits.offset = true;
 
-        m_pending.offset = {x, y};
+        if (x != 0 || y != 0) {
+            m_pending.updated.bits.offset = true;
+            m_pending.offset              = {x, y};
+        }
 
         if (m_pending.buffer)
             m_pending.buffer.drop();
