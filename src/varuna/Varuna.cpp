@@ -58,6 +58,7 @@
 #include "keepclear.hpp"
 #include "requests.hpp"
 #include "minimize.hpp"
+#include "switcher.hpp"
 #include "showdesktop.hpp"
 #include "places.hpp"
 #include "glass_protocol.hpp"
@@ -500,7 +501,7 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     in >> cmd >> sub;
     // Minimizing into the Dock (minimize.hpp).
     if (sub == "features")
-        return "minimize fullscreen edges wallpaper pick desktopglass mission glassprotocol places showdesktop";
+        return "minimize fullscreen edges wallpaper pick desktopglass mission glassprotocol places showdesktop switcher";
     if (sub == "minimize" || sub == "restore" || sub == "snapinfo" || sub == "where")
         return minimize::command(sub, in);
     // Snapping a floating window (snap.hpp).
@@ -514,6 +515,8 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
         return places::command(in);
     if (sub == "desktop")
         return showdesktop::command(in);
+    if (sub == "switcher")
+        return switcher::command(in);
     if (sub == "edge")
         return edges::command(in);
     if (sub == "snap")
@@ -1361,6 +1364,7 @@ static void start() {
     picker::init();
     places::init();
     showdesktop::init();
+    switcher::init();
     glass_protocol::init([](const std::string& key, uint8_t kind, bool lifted, std::vector<glass_protocol::SPiece> pieces) {
         std::vector<SShape> shapes;
         for (const auto& p : pieces)
