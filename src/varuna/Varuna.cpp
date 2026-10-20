@@ -504,7 +504,7 @@ static std::string onShapesCommand(eHyprCtlOutputFormat, std::string request) {
     in >> cmd >> sub;
     // Minimizing into the Dock (minimize.hpp).
     if (sub == "features")
-        return "minimize fullscreen edges wallpaper pick desktopglass mission glassprotocol places showdesktop switcher freeze";
+        return Varuna::features();
     if (sub == "minimize" || sub == "restore" || sub == "snapinfo" || sub == "where")
         return minimize::command(sub, in);
     // Snapping a floating window (snap.hpp).
@@ -1620,6 +1620,10 @@ void Varuna::stop() {
 
 void Varuna::beforeLayer(const PHLLS& layer, const PHLMONITOR& monitor) {
     mission::beforeLayer(layer, monitor);
+}
+
+std::string Varuna::features() {
+    return "minimize fullscreen edges wallpaper pick desktopglass mission glassprotocol places showdesktop switcher freeze";
 }
 
 bool Varuna::drawWallpaper(const PHLMONITOR& monitor) {

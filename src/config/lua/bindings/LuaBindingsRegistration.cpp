@@ -7,6 +7,8 @@
 #include "../objects/LuaTimer.hpp"
 #include "../objects/LuaWindowRule.hpp"
 #include "../objects/LuaWorkspaceRule.hpp"
+#include "../../../varuna/Varuna.hpp"
+#include <sstream>
 
 using namespace Config;
 using namespace Config::Lua;
@@ -95,6 +97,14 @@ void Internal::registerBindingsImpl(lua_State* L, CConfigManager* mgr) {
 
     lua_pushboolean(L, true);
     lua_setfield(L, -2, "varuna");
+
+    lua_newtable(L);
+    std::istringstream features(Varuna::features());
+    for (std::string feature; features >> feature;) {
+        lua_pushboolean(L, true);
+        lua_setfield(L, -2, feature.c_str());
+    }
+    lua_setfield(L, -2, "varuna_features");
 
     lua_setglobal(L, "hl");
 

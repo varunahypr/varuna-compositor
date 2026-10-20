@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "../desktop/DesktopTypes.hpp"
 
 namespace Layout {
@@ -13,6 +15,7 @@ namespace Desktop::View {
 namespace Varuna {
     void init();
     void stop();
+    std::string features();
     bool drawWallpaper(const PHLMONITOR& monitor);
     void beforeLayer(const PHLLS& layer, const PHLMONITOR& monitor);
     bool onFullscreenRequest(const PHLWINDOW& window, bool on);
